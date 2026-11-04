@@ -1024,8 +1024,9 @@ void CTreeMap::DrawNeonRect(const BitmapView bitmap, const CRect& rc, const COLO
     }
 
     // Brightness by distance from the tile edge: white-hot rim, fading glow, dark core
-    static constexpr std::array<float, 8> glow = { 1.0f, 0.90f, 0.58f, 0.38f, 0.27f, 0.21f, 0.18f, 0.16f };
-    constexpr float core = 0.14f;
+    static constexpr std::array<float, 12> glow = { 1.0f, 0.92f, 0.70f, 0.54f, 0.44f, 0.37f,
+        0.32f, 0.29f, 0.27f, 0.25f, 0.24f, 0.23f };
+    constexpr float core = 0.22f;
     constexpr float rimWhite = 0.40f;    // share of white mixed into the outermost pixel
     constexpr float scanline = 0.65f;    // brightness of every third interior row
 
