@@ -44,6 +44,9 @@ namespace wds
     inline constexpr auto chrAttributeSparse       = L'Z'; /*FILE_ATTRIBUTE_SPARSE*/
 
     inline constexpr auto strWinDirStat = L"WinDirStat";
+    // CyberDirStat branding (display only: registry keys, files and CSV headers keep the WinDirStat name)
+    inline constexpr auto strCyberDirStat = L"CyberDirStat";
+    inline constexpr auto strCyberDirStatUrl = L"https://github.com/SevereClaw/CyberDirStart";
     inline constexpr std::wstring_view strAlpha{ L"ABCDEFGHIJKLMNOPQRSTUVWXYZ" };
     inline constexpr int alphaSize = std::ssize(strAlpha);
 

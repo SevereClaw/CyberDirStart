@@ -595,7 +595,7 @@ std::wstring GetAppTitle()
         return condition ? std::format(L" {}", text) : L"";
     };
 
-    return std::format(L"{}{}{} {}.{}.{}", Localization::LookupNeutral(IDS_APP_TITLE),
+    return std::format(L"{}{}{} {}.{}.{}", wds::strCyberDirStat,
         formatTag(CDirStatApp::InPortableMode(), Localization::Lookup(IDS_PORTABLE)),
         formatTag(PRODUCTION == 0, L"Beta"), PRD_MAJVER, PRD_MINVER, PRD_PATCH);
 }

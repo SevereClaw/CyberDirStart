@@ -66,11 +66,11 @@ void CPageTreeMap::InitializePage()
     assert(m_styleCombo.GetCount() == static_cast<int>(TreeMapLayout::Style::Moore) + 1);
     for (const auto preset : { IDS_MENU_GRAPH_PRESET_CLASSIC, IDS_MENU_GRAPH_PRESET_CALM,
         IDS_MENU_GRAPH_PRESET_FLAT, IDS_MENU_GRAPH_PRESET_PASTEL,
-        IDS_MENU_GRAPH_PRESET_HIGH_CONTRAST, IDS_MENU_GRAPH_PRESET_CUSTOM })
+        IDS_MENU_GRAPH_PRESET_HIGH_CONTRAST, IDS_MENU_GRAPH_PRESET_NEON, IDS_MENU_GRAPH_PRESET_CUSTOM })
     {
         m_presetCombo.AddString(GetLocalizedMenuText(preset));
     }
-    assert(m_presetCombo.GetCount() == static_cast<int>(CTreeMap::Preset::HighContrast) + 2);
+    assert(m_presetCombo.GetCount() == static_cast<int>(CTreeMap::LastPreset) + 2);
 
     UpdateOptions(false);
     UpdatePresetSelection();
@@ -137,7 +137,7 @@ void CPageTreeMap::UpdatePresetSelection()
 {
     const auto preset = CTreeMap::GetMatchingPreset(m_options);
     m_presetCombo.SetCurSel(preset ? std::to_underlying(*preset)
-        : std::to_underlying(CTreeMap::Preset::HighContrast) + 1);
+        : std::to_underlying(CTreeMap::LastPreset) + 1);
 }
 
 void CPageTreeMap::OnSomethingChanged()
@@ -186,7 +186,7 @@ void CPageTreeMap::OnPresetChanged()
 {
     const int preset = m_presetCombo.GetCurSel();
     if (preset < 0) return;
-    if (preset > static_cast<int>(CTreeMap::Preset::HighContrast))
+    if (preset > static_cast<int>(CTreeMap::LastPreset))
     {
         if (m_customOptions) ApplyAppearance(*m_customOptions);
         else UpdatePresetSelection();

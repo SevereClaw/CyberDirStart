@@ -257,6 +257,7 @@ void CTreeMap::Options::SetAppearance(const Options& appearance)
     scaleFactor = appearance.scaleFactor;
     lightSourceX = appearance.lightSourceX;
     lightSourceY = appearance.lightSourceY;
+    neon = appearance.neon;
 }
 
 CTreeMap::Options CTreeMap::GetPreset(const Preset preset)
@@ -294,6 +295,14 @@ CTreeMap::Options CTreeMap::GetPreset(const Preset preset)
         options.height = 0.0;
         options.ambientLight = 1.0;
         break;
+    case Preset::Neon:
+        options.gridColor = RGB(6, 5, 14);
+        options.brightness = 0.80;
+        options.saturation = 1.0;
+        options.height = 0.0;
+        options.ambientLight = 1.0;
+        options.neon = true;
+        break;
     default:
         break;
     }
@@ -307,10 +316,10 @@ std::optional<CTreeMap::Preset> CTreeMap::GetMatchingPreset(const Options& optio
         return std::tuple(candidate.grid, candidate.grid ? candidate.gridColor : CLR_INVALID, candidate.contrastLabels,
             candidate.GetBrightnessPercent(), candidate.GetSaturationPercent(), candidate.GetAmbientLightPercent(),
             candidate.GetHeightPercent(), candidate.GetScaleFactorPercent(),
-            candidate.GetLightSourceXPercent(), candidate.GetLightSourceYPercent());
+            candidate.GetLightSourceXPercent(), candidate.GetLightSourceYPercent(), candidate.neon);
     };
     const auto current = appearance(options);
-    constexpr auto maxPreset = std::to_underlying(Preset::HighContrast);
+    constexpr auto maxPreset = std::to_underlying(LastPreset);
     const auto presets = std::views::iota(0, maxPreset + 1);
     const auto it = std::ranges::find_if(presets, [&](const int preset) {
         return current == appearance(GetPreset(static_cast<Preset>(preset)));
@@ -961,7 +970,11 @@ void CTreeMap::RenderRectangle(const BitmapView bitmap, const CRect& rc, const s
 
     const PreparedColor prepared = PrepareRenderColor(color, m_options.brightness, m_options.saturation);
 
-    if (IsCushionShading())
+    if (m_options.neon)
+    {
+        DrawNeonRect(bitmap, rc, prepared.color, prepared.brightness);
+    }
+    else if (IsCushionShading())
     {
         DrawCushion(bitmap, rc, surface, prepared.color, prepared.brightness);
     }
@@ -994,6 +1007,57 @@ void CTreeMap::DrawSolidRect(const BitmapView bitmap, const CRect& rc, const COL
     {
         std::fill_n(bitmap.bits + static_cast<size_t>(iy) * stride + rc.left,
             width, pixelColor);
+    }
+}
+
+void CTreeMap::DrawNeonRect(const BitmapView bitmap, const CRect& rc, const COLORREF col, const double brightness) const
+{
+    const COLORREF pixel = MakeBitmapColor(col, brightness);
+    const int b = GetRValue(pixel), g = GetGValue(pixel), r = GetBValue(pixel); // bitmap is BGR
+    const std::size_t stride = bitmap.stride;
+
+    // Tiny tiles have no room for a glow: draw them as solid neon
+    if (rc.Width() < 4 || rc.Height() < 4)
+    {
+        DrawSolidRect(bitmap, rc, col, brightness);
+        return;
+    }
+
+    // Brightness by distance from the tile edge: white-hot rim, fading glow, dark core
+    static constexpr std::array<float, 8> glow = { 1.0f, 0.90f, 0.58f, 0.38f, 0.27f, 0.21f, 0.18f, 0.16f };
+    constexpr float core = 0.14f;
+    constexpr float rimWhite = 0.40f;    // share of white mixed into the outermost pixel
+    constexpr float scanline = 0.65f;    // brightness of every third interior row
+
+    const auto shade = [r, g, b](const float k, const float white) -> COLORREF
+    {
+        int red = static_cast<int>(r * k * (1.0f - white) + 255.0f * white);
+        int green = static_cast<int>(g * k * (1.0f - white) + 255.0f * white);
+        int blue = static_cast<int>(b * k * (1.0f - white) + 255.0f * white);
+        CColorSpace::NormalizeColor(red, green, blue);
+        return BGR(blue, green, red);
+    };
+
+    std::array<COLORREF, glow.size() + 1> lut{};
+    std::array<COLORREF, glow.size() + 1> lutScan{};
+    for (std::size_t i = 0; i < lut.size(); ++i)
+    {
+        const float k = i < glow.size() ? glow[i] : core;
+        lut[i] = shade(k, i == 0 ? rimWhite : 0.0f);
+        lutScan[i] = i < 2 ? lut[i] : shade(k * scanline, 0.0f);
+    }
+
+    constexpr int maxIndex = static_cast<int>(glow.size());
+    for (int iy = rc.top; iy < rc.bottom; ++iy)
+    {
+        COLORREF* const row = bitmap.bits + static_cast<std::size_t>(iy) * stride;
+        const int dy = std::min(iy - rc.top, rc.bottom - 1 - iy);
+        const auto& table = (iy - rc.top) % 3 == 2 ? lutScan : lut;
+        for (int ix = rc.left; ix < rc.right; ++ix)
+        {
+            const int dx = std::min(ix - rc.left, rc.right - 1 - ix);
+            row[ix] = table[static_cast<std::size_t>(std::min({ dx, dy, maxIndex }))];
+        }
     }
 }
 

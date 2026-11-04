@@ -525,7 +525,8 @@ void CMainFrame::OnViewGraphPreset(const UINT commandId)
 {
     if (CWinDirStatModel::Get()->IsScanRunning()) return;
 
-    const auto preset = static_cast<CTreeMap::Preset>(commandId - ID_VIEW_GRAPH_PRESET_CLASSIC);
+    const auto preset = commandId == ID_VIEW_GRAPH_PRESET_NEON ? CTreeMap::Preset::Neon
+        : static_cast<CTreeMap::Preset>(commandId - ID_VIEW_GRAPH_PRESET_CLASSIC);
     CTreeMap::Options options = COptions::TreeMapOptions;
     if (commandId == ID_VIEW_GRAPH_PRESET_CUSTOM)
     {
@@ -542,7 +543,8 @@ void CMainFrame::OnUpdateViewGraphPreset(CCmdUI* pCmdUI) const
     const bool custom = pCmdUI->m_nID == ID_VIEW_GRAPH_PRESET_CUSTOM;
     pCmdUI->Enable(!CWinDirStatModel::Get()->IsScanRunning()
         && (!custom || COptions::GetCustomTreeMapPreset().has_value()));
-    const auto preset = static_cast<CTreeMap::Preset>(pCmdUI->m_nID - ID_VIEW_GRAPH_PRESET_CLASSIC);
+    const auto preset = pCmdUI->m_nID == ID_VIEW_GRAPH_PRESET_NEON ? CTreeMap::Preset::Neon
+        : static_cast<CTreeMap::Preset>(pCmdUI->m_nID - ID_VIEW_GRAPH_PRESET_CLASSIC);
     const auto current = CTreeMap::GetMatchingPreset(COptions::TreeMapOptions);
     pCmdUI->SetRadio(custom ? !current : current == preset);
 }

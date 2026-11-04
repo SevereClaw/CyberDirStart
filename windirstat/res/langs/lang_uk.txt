@@ -1,4 +1,5 @@
 IDS_ABOUT_ABOUT_TEXTss=\nWinDirStat - Статистика каталогів\n\n"Показує, куди подівся вільний простір,\nта допомагає вам очистити його."\n\nПрограмування для Microsoft Windows -\nBernhard Seifert, Oliver Schneider, Bryan Berns\n(mailto:{}),\n\nбазується на програмі KDirStat - Stefan Hundhammer для KDE (Linux)\n(https://kdirstat.sourceforge.net/).\n\nОфіційний сайт: {}/\n\nCopyright © WinDirStat Team
+IDS_ABOUT_CYBER_TEXTs=\nCyberDirStat — неоновий форк WinDirStat\n{}\n\nКіберпанк-тема, неонова карта та анімація сканера — проєкт CyberDirStat.\nСаму програму WinDirStat створили її автори:\n
 IDS_ABOUT_ABOUT=Про програму
 IDS_ABOUT_LICENSE=Ліцензія
 IDS_ABOUT_THANKS_TEXT=\nStefan Hundhammer за його чудовий інструмент KDirStat для Linux.\nВикористання KDirStat як специфікації заощадило мені багато часу.\nhttps://kdirstat.sourceforge.net/\n\nАвторам SequoiaView за демонстрацію корисності використання карти каталогів (treemap).\nhttps://www.win.tue.nl/sequoiaview/\n\nJarke J. van Wijk, Huub van de Wetering, Mark Bruls та Kees Huizing\nза їхні праці про подушкові treemap та squarified treemap.\nhttps://www.win.tue.nl/~vanwijk/\n\nBen Shneiderman за його винахідливу ідею карти каталогів -\nпо-справжньому інтуїтивного способу візуалізації деревної структури.\nhttps://www.cs.umd.edu/hcil/TreeMap.history/\n
@@ -134,6 +135,7 @@ IDS_MENU_GRAPH_PRESET_CLASSIC=&Класичний
 IDS_MENU_GRAPH_PRESET_CUSTOM=К&ористувацький
 IDS_MENU_GRAPH_PRESET_FLAT=&Плаский
 IDS_MENU_GRAPH_PRESET_HIGH_CONTRAST=&Висока контрастність
+IDS_MENU_GRAPH_PRESET_NEON=&Неон
 IDS_MENU_GRAPH_PRESET_PASTEL=П&астельний
 IDS_MENU_GRAPH_PRESETS=&Колірні налаштування
 IDS_MENU_GROUP_TYPES=Групува&ти незареєстровані типи

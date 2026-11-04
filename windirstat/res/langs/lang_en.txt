@@ -1,4 +1,5 @@
 IDS_ABOUT_ABOUT_TEXTss=\nWinDirStat - Directory Statistics\n\n"Shows where all your drive space has gone\nand helps you clean it up."\n\nProgrammed for Microsoft Windows by\nBernhard Seifert, Oliver Schneider, Bryan Berns\n(mailto:{}),\n\nBased on Stefan Hundhammer's KDE (Linux) application KDirStat\n(https://kdirstat.sourceforge.net/).\n\nWinDirStat's home is {}/\n\nCopyright © WinDirStat Team
+IDS_ABOUT_CYBER_TEXTs=\nCyberDirStat - a neon fork of WinDirStat\n{}\n\nCyberpunk theme, neon treemap and scanner animation by the CyberDirStat project.\nWinDirStat itself is the work of its original authors:\n
 IDS_ABOUT_ABOUT=About
 IDS_ABOUT_LICENSE=License
 IDS_ABOUT_THANKS_TEXT=\nStefan Hundhammer for his superb Linux tool KDirStat.\nUsing KDirStat as a specification saved me a lot of time.\nhttps://kdirstat.sourceforge.net/\n\nThe authors of SequoiaView for showing just how useful treemaps really can be.\nhttps://www.win.tue.nl/sequoiaview/\n\nJarke J. van Wijk, Huub van de Wetering, Mark Bruls and Kees Huizing\nfor their papers about cushion treemaps and squarified treemaps.\nhttps://www.win.tue.nl/~vanwijk/\n\nBen Shneiderman for his ingenious idea of treemaps -\na truly intuitive way of visualizing tree contents.\nhttps://www.cs.umd.edu/hcil/TreeMap.history/\n
@@ -134,6 +135,7 @@ IDS_MENU_GRAPH_PRESET_CLASSIC=&Classic
 IDS_MENU_GRAPH_PRESET_CUSTOM=C&ustom
 IDS_MENU_GRAPH_PRESET_FLAT=&Flat
 IDS_MENU_GRAPH_PRESET_HIGH_CONTRAST=&High Contrast
+IDS_MENU_GRAPH_PRESET_NEON=&Neon
 IDS_MENU_GRAPH_PRESET_PASTEL=&Pastel
 IDS_MENU_GRAPH_PRESETS=&Color Presets
 IDS_MENU_GROUP_TYPES=Group Unregistere&d Types

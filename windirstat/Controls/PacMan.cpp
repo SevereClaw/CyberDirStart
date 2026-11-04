@@ -87,6 +87,13 @@ void CPacman::Draw(CDC* pdc, const CRect& rect, const COLORREF backColor,
     }
     if (m_done || size <= 0) return;
 
+    // CyberDirStat: neon "scanner" instead of Pac-Man in the Cyberpunk theme
+    if (DarkMode::IsCyberpunkActive())
+    {
+        DrawNeonScanner(pdc, rect, rc, size, dots, now);
+        return;
+    }
+
     // Create pens and brushes
     static const Gdiplus::Pen blackPen(Gdiplus::Color(0xFF, 0x00, 0x00, 0x00), 1);
     static const Gdiplus::SolidBrush yellowBrush(Gdiplus::Color(0xFF, 0xFC, 0xC9, 0x2F));
@@ -125,6 +132,73 @@ void CPacman::Draw(CDC* pdc, const CRect& rect, const COLORREF backColor,
         const auto deltaY = (x + 1) * static_cast<float>(rc.Height()) / 18.0f;
         graphics.DrawString(L"z", 1, &*font, { rc.left + deltaX, rc.top - deltaY }, &zBrush);
     }
+}
+
+void CPacman::DrawNeonScanner(CDC* pdc, const CRect& rect, const CRect& rc, const int size,
+    const bool dots, const ULONGLONG now) const
+{
+    Gdiplus::Graphics graphics(pdc->Handle());
+    graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+
+    const auto argb = [](const BYTE alpha, const COLORREF c)
+    {
+        return Gdiplus::Color(alpha, GetRValue(c), GetGValue(c), GetBValue(c));
+    };
+
+    const int headW = std::max(2, size / 3);
+    const int headX = rc.left + (size - headW) / 2;
+
+    // Idle: blinking terminal cursor
+    if (!m_moving)
+    {
+        if ((now / 500) % 2 == 0)
+        {
+            const int cursorH = std::max(2, size / 4);
+            const Gdiplus::SolidBrush cursor(argb(0xFF, DarkMode::NeonCyan));
+            graphics.FillRectangle(&cursor, headX, rc.bottom - cursorH, headW, cursorH);
+        }
+        return;
+    }
+
+    // Flickering "data bits" ahead of the scanner
+    if (dots)
+    {
+        const int spacing = std::max(8, rc.Height()), bit = std::max(2, rc.Height() / 5);
+        for (int x = rect.left + spacing; x < rect.right - spacing / 2; x += spacing)
+        {
+            if (m_toTheRight ? x <= rc.right : x >= rc.left) continue;
+            const auto hash = static_cast<std::uint32_t>(x * 2654435761u ^ static_cast<std::uint32_t>(now / 140) * 40503u);
+            const BYTE alpha = static_cast<BYTE>(90 + (hash >> 16) % 166);
+            const Gdiplus::SolidBrush brush(argb(alpha, DarkMode::NeonYellow));
+            graphics.FillRectangle(&brush, x - bit / 2, rc.top + (rc.Height() - bit) / 2, bit, bit);
+        }
+    }
+
+    // Fading trail behind the head: cyan -> magenta
+    constexpr int trailSegments = 7;
+    const int step = headW + std::max(1, headW / 2);
+    const int direction = m_toTheRight ? -1 : 1;
+    for (int i = trailSegments; i >= 1; --i)
+    {
+        const float t = static_cast<float>(i) / trailSegments;
+        const COLORREF color = CColorSpace::BlendColor(DarkMode::NeonCyan, DarkMode::NeonMagenta, t);
+        const BYTE alpha = static_cast<BYTE>(220 * (1.0f - t) + 20);
+        const int segH = std::max(2, static_cast<int>(size * (1.0f - 0.5f * t)));
+        const int x = headX + direction * step * i;
+        if (x + headW < rect.left || x > rect.right) continue;
+        const Gdiplus::SolidBrush brush(argb(alpha, color));
+        graphics.FillRectangle(&brush, x, rc.top + (size - segH) / 2, headW, segH);
+    }
+
+    // Head: soft glow, cyan core, white-hot center line
+    const int glow = std::max(1, size / 4);
+    const Gdiplus::SolidBrush glowBrush(argb(0x55, DarkMode::NeonCyan));
+    graphics.FillRectangle(&glowBrush, headX - glow, rc.top - glow / 2, headW + 2 * glow, size + glow);
+    const Gdiplus::SolidBrush coreBrush(argb(0xFF, DarkMode::NeonCyan));
+    graphics.FillRectangle(&coreBrush, headX, rc.top, headW, size);
+    const Gdiplus::SolidBrush hotBrush(argb(0xFF, RGB(235, 255, 255)));
+    graphics.FillRectangle(&hotBrush, headX + headW / 2 - std::max(1, headW / 6) / 2, rc.top + 1,
+        std::max(1, headW / 6), std::max(1, size - 2));
 }
 
 void CPacman::UpdatePosition(float& position, bool& up, const float diff)

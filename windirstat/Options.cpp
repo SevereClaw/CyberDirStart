@@ -66,6 +66,7 @@ void COptions::SetTreeMapOptions(const CTreeMap::Options& options, const bool no
     TreeMapAmbientLightPercent = TreeMapOptions.GetAmbientLightPercent();
     TreeMapLightSourceX = TreeMapOptions.GetLightSourceXPercent();
     TreeMapLightSourceY = TreeMapOptions.GetLightSourceYPercent();
+    TreeMapNeon = TreeMapOptions.neon;
 
     if (notify) CWinDirStatModel::Get()->NotifyPanes(MODEL_CHANGE_TREEMAP_STYLE);
 }
@@ -77,13 +78,14 @@ void COptions::SaveCustomTreeMapPreset(const CTreeMap::Options& options)
     TreeMapCustomPreset = std::vector<int>{ options.grid, static_cast<int>(options.gridColor),
         options.contrastLabels, options.GetBrightnessPercent(), options.GetSaturationPercent(),
         options.GetAmbientLightPercent(), options.GetHeightPercent(), options.GetScaleFactorPercent(),
-        options.GetLightSourceXPercent(), options.GetLightSourceYPercent() };
+        options.GetLightSourceXPercent(), options.GetLightSourceYPercent(), options.neon };
 }
 
 std::optional<CTreeMap::Options> COptions::GetCustomTreeMapPreset()
 {
     const auto& values = TreeMapCustomPreset.Obj();
-    if (values.size() != 10) return std::nullopt;
+    // 10 values: upstream format; 11th value: CyberDirStat neon flag
+    if (values.size() != 10 && values.size() != 11) return std::nullopt;
 
     auto options = CTreeMap::GetDefaults();
     options.grid = values[0] != 0;
@@ -96,6 +98,7 @@ std::optional<CTreeMap::Options> COptions::GetCustomTreeMapPreset()
     options.SetScaleFactorPercent(std::clamp(values[7], 0, 100));
     options.SetLightSourceXPercent(std::clamp(values[8], -200, 200));
     options.SetLightSourceYPercent(std::clamp(values[9], -200, 200));
+    options.neon = values.size() > 10 && values[10] != 0;
     return options;
 }
 
@@ -187,6 +190,7 @@ void COptions::PostProcessPersistedSettings()
     TreeMapOptions.SetAmbientLightPercent(TreeMapAmbientLightPercent);
     TreeMapOptions.SetLightSourceXPercent(TreeMapLightSourceX);
     TreeMapOptions.SetLightSourceYPercent(TreeMapLightSourceY);
+    TreeMapOptions.neon = TreeMapNeon;
     SaveCustomTreeMapPreset(TreeMapOptions);
 
     // Adjust Title to language default Title

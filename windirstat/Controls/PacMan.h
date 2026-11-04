@@ -25,6 +25,7 @@ public:
 
 private:
     static void UpdatePosition(float& position, bool& up, float diff);
+    void DrawNeonScanner(CDC* pdc, const CRect& rect, const CRect& rc, int size, bool dots, ULONGLONG now) const;
     static inline bool m_suspended = false;
 
     ULONGLONG m_lastUpdate = 0;  // TickCount

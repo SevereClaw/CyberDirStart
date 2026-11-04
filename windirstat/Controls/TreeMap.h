@@ -222,6 +222,7 @@ public:
         double ambientLight; // 0..1.0   (default = 0.15)    Factor "Ia"
         double lightSourceX; // -4.0..+4.0 (default = -1.0), negative = left
         double lightSourceY; // -4.0..+4.0 (default = -1.0), negative = top
+        bool neon = false;   // CyberDirStat: dark tiles with glowing neon outlines
 
         constexpr int GetBrightnessPercent() const { return RoundDouble(brightness * 100); }
         constexpr int GetSaturationPercent() const { return RoundDouble(saturation * 100); }
@@ -256,8 +257,9 @@ public:
     static Options GetDefaults() { return GetPreset(Preset::Classic); }
     enum class Preset : std::uint8_t
     {
-        Classic, Calm, Flat, Pastel, HighContrast
+        Classic, Calm, Flat, Pastel, HighContrast, Neon
     };
+    static constexpr Preset LastPreset = Preset::Neon;
     static Options GetPreset(Preset preset);
     static std::optional<Preset> GetMatchingPreset(const Options& options);
     static COLORREF GetFlatColor(DWORD color, const Options& options);
@@ -309,6 +311,9 @@ protected:
 
     // Renders cushion pixels.
     void DrawCushion(BitmapView bitmap, const CRect& rc, const std::array<double, 4>& surface, COLORREF col, double brightness) const;
+
+    // Renders a dark tile with a glowing neon outline and scanlines.
+    void DrawNeonRect(BitmapView bitmap, const CRect& rc, COLORREF col, double brightness) const;
 
     // Fills solid pixels.
     void DrawSolidRect(BitmapView bitmap, const CRect& rc, COLORREF col, double brightness) const;

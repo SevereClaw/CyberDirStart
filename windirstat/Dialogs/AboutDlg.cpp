@@ -36,9 +36,11 @@ void CAboutDlg::WdsTabControl::Initialize()
         CLEARTYPE_NATURAL_QUALITY, FF_MODERN);
 
     // Populate text
-    m_textAbout.SetText(Localization::Format(IDS_ABOUT_ABOUT_TEXTss,
+    // CyberDirStat introduction first, then the original WinDirStat credits (kept as required by the GPL)
+    m_textAbout.SetText((Localization::Format(IDS_ABOUT_CYBER_TEXTs, wds::strCyberDirStatUrl) +
+        Localization::Format(IDS_ABOUT_ABOUT_TEXTss,
         Localization::LookupNeutral(IDS_AUTHOR_EMAIL),
-        Localization::LookupNeutral(IDS_URL_WEBSITE)).c_str());
+        Localization::LookupNeutral(IDS_URL_WEBSITE))).c_str());
 
     m_textThanks.SetText(Localization::Lookup(IDS_ABOUT_THANKS_TEXT));
 

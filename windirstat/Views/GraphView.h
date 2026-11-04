@@ -72,6 +72,7 @@ protected:
     static bool IsExtensionHighlighted(const CItem* item);
     static const CItem* GetDisplayItem(const CItem* item);
     static void RenderHighlightRectangle(CDC* pDC, CRect rect, bool hover = false);
+    static void RenderGlitchRectangle(CDC* pDC, const CRect& rect, bool hover, int scale);
 
 private:
     void PaintEmptyView(CDC* pDC);

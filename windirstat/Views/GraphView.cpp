@@ -225,6 +225,11 @@ void CGraphView::RenderHighlightRectangle(CDC* pDC, CRect rect, const bool hover
     const COLORREF color = hover ? DarkMode::SystemColor(COLOR_WINDOWTEXT) : COptions::TreeMapHighlightColor;
     const int scale = std::max(1, MulDiv(pDC->GetDeviceCaps(LOGPIXELSX), GetFontSizePercent(),
         USER_DEFAULT_SCREEN_DPI * 100));
+    if (DarkMode::IsCyberpunkActive())
+    {
+        RenderGlitchRectangle(pDC, rect, hover, scale);
+        return;
+    }
     if (!hover && std::min(rect.Width(), rect.Height()) <= 2 * scale)
     {
         pDC->FillSolidRect(rect, color);
@@ -237,6 +242,52 @@ void CGraphView::RenderHighlightRectangle(CDC* pDC, CRect rect, const bool hover
         FrameRect(pDC->Handle(), &rect, static_cast<HBRUSH>(GetStockObject(DC_BRUSH)));
         rect.Deflate(1, 1);
     }
+}
+
+// Cyberpunk highlight: chromatic-aberration "glitch" frame (cyan/magenta copies shifted
+// sideways around a white core) and, for the selection, yellow HUD corner brackets.
+void CGraphView::RenderGlitchRectangle(CDC* pDC, const CRect& rect, const bool hover, const int scale)
+{
+    const auto frame = [pDC](CRect rc, const COLORREF color, const int thickness)
+    {
+        pDC->SetDCBrushColor(color);
+        for (int i = 0; i < thickness && !rc.IsEmpty(); ++i)
+        {
+            FrameRect(pDC->Handle(), &rc, static_cast<HBRUSH>(GetStockObject(DC_BRUSH)));
+            rc.Deflate(1, 1);
+        }
+    };
+
+    if (std::min(rect.Width(), rect.Height()) <= 2 * scale)
+    {
+        pDC->FillSolidRect(rect, hover ? DarkMode::NeonCyan : DarkMode::NeonYellow);
+        return;
+    }
+
+    const int shift = 2 * scale;
+    CRect cyan = rect;
+    cyan.Offset(-shift, 0);
+    CRect magenta = rect;
+    magenta.Offset(shift, 0);
+    frame(cyan, DarkMode::NeonCyan, scale);
+    frame(magenta, DarkMode::NeonMagenta, scale);
+    frame(rect, hover ? RGB(255, 255, 255) : DarkMode::NeonYellow, scale);
+    if (hover) return;
+
+    // HUD corner brackets just outside the selected item
+    CRect outer = rect;
+    outer.Inflate(2 * scale, 2 * scale);
+    const int arm = std::max(4 * scale, std::min(outer.Width(), outer.Height()) / 5);
+    const int t = 2 * scale;
+    const COLORREF yellow = DarkMode::NeonYellow;
+    pDC->FillSolidRect(outer.left, outer.top, arm, t, yellow);
+    pDC->FillSolidRect(outer.left, outer.top, t, arm, yellow);
+    pDC->FillSolidRect(outer.right - arm, outer.top, arm, t, yellow);
+    pDC->FillSolidRect(outer.right - t, outer.top, t, arm, yellow);
+    pDC->FillSolidRect(outer.left, outer.bottom - t, arm, t, yellow);
+    pDC->FillSolidRect(outer.left, outer.bottom - arm, t, arm, yellow);
+    pDC->FillSolidRect(outer.right - arm, outer.bottom - t, arm, t, yellow);
+    pDC->FillSolidRect(outer.right - t, outer.bottom - arm, t, arm, yellow);
 }
 
 CItem* CGraphView::ResolveItemAtPoint(CPoint point, const bool isScreenCoords)
