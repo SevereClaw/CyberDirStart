@@ -371,6 +371,7 @@ void CSunburst::CreatePath(const LayoutEntry& entry, Gdiplus::GraphicsPath& path
 
 COLORREF CSunburst::GetItemColor(const LayoutEntry& entry) const
 {
+    if (entry.remainderSize != 0 && DarkMode::IsCyberpunkActive()) return DarkMode::NeonViolet;
     if (entry.remainderSize != 0)
         return CColorSpace::BlendColor(DarkMode::SystemColor(COLOR_WINDOW),
             DarkMode::SystemColor(COLOR_WINDOWTEXT), 0.20);
@@ -394,6 +395,29 @@ void CSunburst::RenderEntry(Gdiplus::Graphics& graphics, const LayoutEntry& entr
     Gdiplus::GraphicsPath path(Gdiplus::FillModeAlternate);
     CreatePath(entry, path);
     const COLORREF color = GetItemColor(entry);
+    if (DarkMode::IsCyberpunkActive())
+    {
+        // Neon: dark tinted sector, inner glow clipped to the sector, crisp bright edge
+        const COLORREF background = DarkMode::SystemColor(COLOR_WINDOW);
+        brush.SetColor(ToGdiColor(CColorSpace::BlendColor(color, background, 0.78)));
+        graphics.FillPath(&brush, &path);
+
+        const auto scale = static_cast<Gdiplus::REAL>(m_dpiScale);
+        const Gdiplus::GraphicsState state = graphics.Save();
+        graphics.SetClip(&path, Gdiplus::CombineModeIntersect);
+        Gdiplus::Pen glow(Gdiplus::Color(70, GetRValue(color), GetGValue(color), GetBValue(color)), 7.0f * scale);
+        glow.SetLineJoin(Gdiplus::LineJoinRound);
+        graphics.DrawPath(&glow, &path);
+        glow.SetColor(Gdiplus::Color(110, GetRValue(color), GetGValue(color), GetBValue(color)));
+        glow.SetWidth(3.5f * scale);
+        graphics.DrawPath(&glow, &path);
+        graphics.Restore(state);
+
+        Gdiplus::Pen edge(ToGdiColor(CColorSpace::BlendColor(color, RGB(255, 255, 255), 0.25)), 1.2f * scale);
+        edge.SetAlignment(Gdiplus::PenAlignmentInset);
+        graphics.DrawPath(&edge, &path);
+        return;
+    }
     brush.SetColor(ToGdiColor(color));
     graphics.FillPath(&brush, &path);
 
@@ -413,6 +437,26 @@ void CSunburst::RenderLayout(CDC* pdc) const
     Gdiplus::SolidBrush brush(Gdiplus::Color{});
     Gdiplus::Pen separator(Gdiplus::Color{}, SEPARATOR_WIDTH);
     separator.SetAlignment(Gdiplus::PenAlignmentInset);
+    if (DarkMode::IsCyberpunkActive() && m_outerRadius > 0.0)
+    {
+        // HUD: dashed radar ring with tick marks just outside the chart
+        const auto scale = static_cast<Gdiplus::REAL>(m_dpiScale);
+        const auto cx = static_cast<Gdiplus::REAL>(m_center.x), cy = static_cast<Gdiplus::REAL>(m_center.y);
+        const auto r = static_cast<Gdiplus::REAL>(m_outerRadius) + 3.0f * scale;
+        Gdiplus::Pen ring(Gdiplus::Color(150, GetRValue(DarkMode::NeonCyan), GetGValue(DarkMode::NeonCyan),
+            GetBValue(DarkMode::NeonCyan)), 1.0f * scale);
+        ring.SetDashStyle(Gdiplus::DashStyleDash);
+        graphics.DrawEllipse(&ring, cx - r, cy - r, 2 * r, 2 * r);
+        Gdiplus::Pen tick(Gdiplus::Color(220, GetRValue(DarkMode::NeonMagenta), GetGValue(DarkMode::NeonMagenta),
+            GetBValue(DarkMode::NeonMagenta)), 2.0f * scale);
+        for (int i = 0; i < 12; ++i)
+        {
+            const double angle = i * std::numbers::pi_v<double> / 6.0;
+            const auto c = static_cast<Gdiplus::REAL>(std::cos(angle)), s = static_cast<Gdiplus::REAL>(std::sin(angle));
+            const Gdiplus::REAL len = (i % 3 == 0 ? 4.0f : 2.0f) * scale;
+            graphics.DrawLine(&tick, cx + c * (r - len), cy + s * (r - len), cx + c * (r + len), cy + s * (r + len));
+        }
+    }
     for (const LayoutEntry& entry : m_entries)
     {
         RenderEntry(graphics, entry, brush, separator);
@@ -521,8 +565,9 @@ bool CSunburst::RenderLabel(Gdiplus::Graphics& graphics,
 
     const auto dpiScale = static_cast<Gdiplus::REAL>(m_dpiScale);
     const COLORREF itemColor = GetItemColor(entry);
-    const Gdiplus::SolidBrush textBrush(ToGdiColor(
-        CColorSpace::GetTextColor(itemColor, DarkMode::SystemColor(COLOR_WINDOWTEXT))));
+    const Gdiplus::SolidBrush textBrush(ToGdiColor(DarkMode::IsCyberpunkActive()
+        ? CColorSpace::BlendColor(itemColor, RGB(255, 255, 255), 0.55)
+        : CColorSpace::GetTextColor(itemColor, DarkMode::SystemColor(COLOR_WINDOWTEXT))));
     if (entry.depth == 0)
     {
         const auto half = static_cast<Gdiplus::REAL>(entry.outerRadius * 0.70);
@@ -695,6 +740,22 @@ void CSunburst::DrawOutlineEntry(Gdiplus::Graphics& graphics, const LayoutEntry&
     Gdiplus::GraphicsPath path(Gdiplus::FillModeAlternate);
     CreatePath(entry, path);
     const auto scale = static_cast<float>(m_dpiScale);
+    if (DarkMode::IsCyberpunkActive())
+    {
+        // Chromatic-aberration "glitch": cyan and magenta copies shifted sideways
+        const auto shift = 2.0f * scale;
+        Gdiplus::Pen ghost(ToGdiColor(DarkMode::NeonCyan), width * scale);
+        const Gdiplus::GraphicsState state = graphics.Save();
+        graphics.TranslateTransform(-shift, 0.0f);
+        graphics.DrawPath(&ghost, &path);
+        graphics.TranslateTransform(2.0f * shift, 0.0f);
+        ghost.SetColor(ToGdiColor(DarkMode::NeonMagenta));
+        graphics.DrawPath(&ghost, &path);
+        graphics.Restore(state);
+        Gdiplus::Pen core(ToGdiColor(color), width * scale);
+        graphics.DrawPath(&core, &path);
+        return;
+    }
     Gdiplus::Pen underlay(ToGdiColor(CColorSpace::GetContrastingColor(color)), (width + 1.0f) * scale);
     Gdiplus::Pen pen(ToGdiColor(color), width * scale);
     underlay.SetAlignment(Gdiplus::PenAlignmentCenter);
@@ -713,7 +774,8 @@ void CSunburst::DrawHoverItem(CDC* pdc, const CItem* item, const bool remainder)
     Gdiplus::Graphics graphics(pdc->Handle());
     graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
     graphics.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHighQuality);
-    DrawOutlineEntry(graphics, *entry, DarkMode::SystemColor(COLOR_WINDOWTEXT), 1.0f);
+    DrawOutlineEntry(graphics, *entry, DarkMode::IsCyberpunkActive()
+        ? RGB(255, 255, 255) : DarkMode::SystemColor(COLOR_WINDOWTEXT), 1.0f);
 }
 
 void CSunburst::DrawOutlineItems(CDC* pdc, const std::span<const CItem* const> items,

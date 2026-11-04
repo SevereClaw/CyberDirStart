@@ -17,7 +17,13 @@ void CSunburstView::DrawEmptyPlaceholder(CDC* pDC, const CRect& rect)
     const CPoint center = rect.Center();
     Gdiplus::Graphics graphics(pDC->Handle());
     graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
-    const std::array shades{
+    const bool neon = DarkMode::IsCyberpunkActive();
+    const std::array shades = neon ? std::array{
+        Gdiplus::Color(255, 30, 16, 56),
+        Gdiplus::Color(255, 10, 44, 60),
+        Gdiplus::Color(255, 44, 14, 50),
+        Gdiplus::Color(255, 18, 30, 70),
+    } : std::array{
         Gdiplus::Color(255, 58, 61, 68),
         Gdiplus::Color(255, 72, 76, 84),
         Gdiplus::Color(255, 50, 53, 59),
@@ -38,7 +44,7 @@ void CSunburstView::DrawEmptyPlaceholder(CDC* pDC, const CRect& rect)
         Gdiplus::SolidBrush brush(shade);
         graphics.FillPath(&brush, &path);
     }
-    const Gdiplus::Pen separator(Gdiplus::Color(255, 24, 24, 24),
+    const Gdiplus::Pen separator(neon ? Gdiplus::Color(255, 90, 0, 60) : Gdiplus::Color(255, 24, 24, 24),
         static_cast<Gdiplus::REAL>(separatorWidth));
     for (const int i : std::views::iota(0, 12))
     {
