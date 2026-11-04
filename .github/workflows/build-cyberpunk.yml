@@ -1,12 +1,19 @@
 name: Build WinDirStat (Cyberpunk)
 
 # Every push builds the exe (downloadable from the run's Artifacts).
-# Pushing a tag like v1.0 also publishes a GitHub Release with zip files.
+# A release (GitHub Release page with zip files) is published when:
+#   - a tag like v1.0 is pushed, or
+#   - Actions -> "Build WinDirStat (Cyberpunk)" -> Run workflow is started with a version filled in.
 on:
   push:
     branches: ['**']
     tags: ['v*']
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version to publish, e.g. v1.0 (leave empty to only build)'
+        required: false
+        default: ''
 
 jobs:
   build:
@@ -33,11 +40,13 @@ jobs:
           if-no-files-found: error
 
   release:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.version != '')
     needs: build
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    env:
+      TAG: ${{ inputs.version || github.ref_name }}
     steps:
       - uses: actions/checkout@v5
 
@@ -51,7 +60,7 @@ jobs:
           for platform in x64 Win32; do
             dir="dist/WinDirStat-Cyberpunk-$platform"
             cp LICENSE.md "$dir/"
-            (cd "$dir" && zip -9 -r "../../release/CyberDirStat-${GITHUB_REF_NAME}-$platform.zip" .)
+            (cd "$dir" && zip -9 -r "../../release/CyberDirStat-${TAG}-$platform.zip" .)
           done
           ls -la release
 
@@ -59,6 +68,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" release/*.zip \
-            --title "CyberDirStat $GITHUB_REF_NAME" \
+          # Creates the tag on the built commit if it does not exist yet
+          gh release create "$TAG" release/*.zip \
+            --target "$GITHUB_SHA" \
+            --title "CyberDirStat $TAG" \
             --generate-notes
