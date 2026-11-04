@@ -744,7 +744,7 @@ void CDC::DrawTreeExpander(const CRect& nodeRect, const bool expanded)
 
     const BYTE shade = DarkMode::IsDarkModeActive() ? 180 : 80;
     const Gdiplus::Color expanderColor = DarkMode::IsCyberpunkActive()
-        ? Gdiplus::Color(255, GetRValue(DarkMode::NeonMagenta), GetGValue(DarkMode::NeonMagenta), GetBValue(DarkMode::NeonMagenta))
+        ? Gdiplus::Color(255, 255, 0, 128) // NeonMagenta
         : Gdiplus::Color(255, shade, shade, shade);
     Gdiplus::Pen pen(expanderColor, std::max(1.0f, nodeRect.Height() / 15.0f));
     pen.SetStartCap(Gdiplus::LineCapRound);
