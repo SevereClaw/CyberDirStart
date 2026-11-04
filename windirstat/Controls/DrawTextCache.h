@@ -1,0 +1,102 @@
+﻿// WinDirStat - Windows Directory Statistics
+// Copyright © WinDirStat Team
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Distributed WITHOUT ANY WARRANTY; see LICENSE.md for details.
+
+#pragma once
+
+#include "pch.h"
+
+class DrawTextCache
+{
+public:
+
+    static constexpr size_t MAX_CACHE_SIZE = 1000;
+    static constexpr size_t MAX_BITMAP_BYTES = 16 * 1024 * 1024;
+
+    // Singleton access
+    static DrawTextCache& Get()
+    {
+        static DrawTextCache instance;
+        return instance;
+    }
+
+    // Main drawing function - replacement for DrawText
+    void DrawTextCached(CDC* pDC, const std::wstring& text, CRect& rect,
+        bool leftAlign = true, bool calcRect = false, bool cacheBitmap = true);
+
+    // Clears all cached entries
+    void ClearCache();
+
+    // Constructor
+    DrawTextCache() { m_cache.reserve(MAX_CACHE_SIZE); }
+
+private:
+
+    // Cache key structure
+    struct CacheKey
+    {
+        std::wstring text;
+        COLORREF textColor;
+        COLORREF backgroundColor;
+        UINT format;
+        int width;
+        int height;
+        USHORT dpi;
+        HFONT font;
+
+        bool operator==(const CacheKey& other) const = default;
+    };
+
+    // Hash function for CacheKey
+    struct CacheKeyHash
+    {
+        size_t operator()(const CacheKey& key) const noexcept
+        {
+            size_t hash = std::hash<std::wstring>{}(key.text);
+            hash ^= std::hash<COLORREF>{}(key.textColor) << 1;
+            hash ^= std::hash<COLORREF>{}(key.backgroundColor) << 2;
+            hash ^= std::hash<UINT>{}(key.format) << 3;
+            hash ^= std::hash<int>{}(key.width) << 4;
+            hash ^= std::hash<int>{}(key.height) << 5;
+            hash ^= std::hash<USHORT>{}(key.dpi) << 6;
+            hash ^= std::hash<HFONT>{}(key.font) << 7;
+            return hash;
+        }
+    };
+
+    // Cached bitmap entry - stored via unique_ptr to avoid copy issues with CBitmap
+    struct CacheEntry
+    {
+        CBitmap bmp;
+        CSize bmpSize;
+        size_t bitmapBytes = 0;
+    };
+
+    // LRU list type - stores keys in order of use (most recent at front)
+    using LRUList = std::list<CacheKey>;
+
+    // Cache map type - uses unique_ptr to store entries
+    using CacheMap = std::unordered_map<CacheKey,
+        std::pair<std::unique_ptr<CacheEntry>, LRUList::iterator>,
+        CacheKeyHash>;
+
+    // Create cache key from current DC state
+    static CacheKey CreateCacheKey(const CDC* pDC, const std::wstring& text,
+        const CRect& rect, UINT format) noexcept;
+
+    // Create cached bitmap for the text
+    static std::unique_ptr<CacheEntry> CreateCachedBitmap(CDC* pDC, const std::wstring& text,
+        const CRect& rect, UINT format) noexcept;
+
+    // Move key to front of LRU list
+    void TouchEntry(const CacheMap::iterator& it);
+
+    // Paint cached entry to DC
+    static void PaintCachedEntry(CDC* pDC, const CRect& rect, const CacheEntry& entry) noexcept;
+
+    CacheMap m_cache;
+    LRUList m_leastRecentList;
+    size_t m_bitmapBytes = 0;
+};

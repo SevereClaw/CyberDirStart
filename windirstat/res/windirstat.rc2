@@ -1,0 +1,11 @@
+// windirstat.rc2 - resources Microsoft Visual C++ does not edit directly
+//
+// WinDirStat - Windows Directory Statistics
+// Copyright © WinDirStat Team
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Distributed WITHOUT ANY WARRANTY; see LICENSE.md for details.
+
+#ifdef APSTUDIO_INVOKED
+#error this file is not editable by Microsoft Visual C++
+#endif //APSTUDIO_INVOKED

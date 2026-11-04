@@ -1,0 +1,503 @@
+﻿// WinDirStat - Windows Directory Statistics
+// Copyright © WinDirStat Team
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Distributed WITHOUT ANY WARRANTY; see LICENSE.md for details.
+
+#include "pch.h"
+#include "LayoutPopup.h"
+#include "DarkMode.h"
+#include "MainFrame.h"
+
+#include <algorithm>
+
+// Splitter structure, default positions, and proportions used by the preview cards.
+const std::array<CLayoutPopup::LayoutDef, LayoutCount> CLayoutPopup::LAYOUTS = []
+{
+    using enum CSplitterWnd::Orientation;
+    return std::to_array<LayoutDef>({
+        // [AF|FT] above visualization
+        { Horizontal, Vertical, 0, { VT_VISUALIZATION, VT_ALLFILES, VT_FILETYPES }, 0.5, 0.75, 0.5f, 0.58f },
+        // AF | [FT|visualization]
+        { Vertical, Vertical, 1, { VT_ALLFILES, VT_FILETYPES, VT_VISUALIZATION }, 0.4, 1.0 / 3.0, 0.4f, 1.0f / 3.0f },
+        // [visualization|AF] | FT
+        { Vertical, Vertical, 0, { VT_FILETYPES, VT_VISUALIZATION, VT_ALLFILES }, 0.8, 0.5, 0.8f, 0.5f },
+        // Visualization above [AF|FT]
+        { Horizontal, Vertical, 1, { VT_VISUALIZATION, VT_ALLFILES, VT_FILETYPES }, 0.5, 0.75, 0.5f, 0.58f },
+        // [AF|visualization] | FT
+        { Vertical, Vertical, 0, { VT_FILETYPES, VT_ALLFILES, VT_VISUALIZATION }, 0.8, 0.5, 0.8f, 0.5f },
+        // Visualization | [FT|AF]
+        { Vertical, Vertical, 1, { VT_VISUALIZATION, VT_FILETYPES, VT_ALLFILES }, 0.4, 1.0 / 3.0, 0.4f, 1.0f / 3.0f },
+        // [AF/visualization] | FT
+        { Vertical, Horizontal, 0, { VT_FILETYPES, VT_ALLFILES, VT_VISUALIZATION }, 0.75, 0.5, 0.6f, 0.5f },
+        // [AF/FT] | visualization
+        { Vertical, Horizontal, 0, { VT_VISUALIZATION, VT_ALLFILES, VT_FILETYPES }, 0.5, 0.5, 0.5f, 0.5f },
+        // Visualization | [AF/FT]
+        { Vertical, Horizontal, 1, { VT_VISUALIZATION, VT_ALLFILES, VT_FILETYPES }, 0.5, 0.5, 0.5f, 0.5f },
+        // [visualization/AF] | FT
+        { Vertical, Horizontal, 0, { VT_FILETYPES, VT_VISUALIZATION, VT_ALLFILES }, 0.75, 0.5, 0.6f, 0.5f },
+        // [FT/AF] | visualization
+        { Vertical, Horizontal, 0, { VT_VISUALIZATION, VT_FILETYPES, VT_ALLFILES }, 0.5, 0.5, 0.5f, 0.5f },
+        // Visualization | [FT/AF]
+        { Vertical, Horizontal, 1, { VT_VISUALIZATION, VT_FILETYPES, VT_ALLFILES }, 0.5, 0.5, 0.5f, 0.5f },
+    });
+}();
+
+std::array<CLayoutPopup::Pane, 3> CLayoutPopup::LayoutDef::PreviewPanes() const
+{
+    // Split the preview with the same pane placement as the live windows.
+    const auto split = [](const Pane& bounds, const CSplitterWnd::Orientation axis, const float ratio)
+    {
+        std::array<Pane, 2> panes{ bounds, bounds };
+        if (axis == CSplitterWnd::Orientation::Vertical)
+        {
+            panes[0].w *= ratio;
+            panes[1].x += panes[0].w;
+            panes[1].w -= panes[0].w;
+        }
+        else
+        {
+            panes[0].h *= ratio;
+            panes[1].y += panes[0].h;
+            panes[1].h -= panes[0].h;
+        }
+        return panes;
+    };
+    auto main = split({ views[0], 0, 0, 1, 1 }, orientation, previewRatio);
+    auto sub = split(main[subPane], subOrientation, previewSubRatio);
+    sub[0].viewType = views[1];
+    sub[1].viewType = views[2];
+    return { main[1 - subPane], sub[0], sub[1] };
+}
+
+bool CLayoutPopup::Create(CWnd* parent)
+{
+    static ATOM s_atom = 0;
+    if (s_atom == 0)
+    {
+        const WNDCLASSEX wc = {
+            .cbSize        = sizeof(WNDCLASSEX),
+            .style         = CS_DROPSHADOW,
+            .lpfnWndProc   = ::DefWindowProc,
+            .hInstance     = GetAppInstance(),
+            .hCursor       = LoadCursor(nullptr, IDC_ARROW),
+            .hbrBackground = reinterpret_cast<HBRUSH>(COLOR_BTNFACE + 1),
+            .lpszClassName = L"WdsLayoutPopup",
+        };
+        s_atom = ::RegisterClassEx(&wc);
+        if (s_atom == 0) return false;
+    }
+
+    return CreateEx(
+        WS_EX_TOOLWINDOW,
+        L"WdsLayoutPopup",
+        nullptr,
+        WS_POPUP | WS_BORDER,
+        0, 0, 1, 1,
+        parent->Handle(),
+        nullptr);
+}
+
+void CLayoutPopup::ShowAtButton(const CRect& buttonScreenRect)
+{
+    m_selectedLayout = COptions::WindowLayout;
+    m_hoveredLayout  = -1;
+
+    const int cw = ScaleForDpi(CARD_W_BASE);
+    const int ch = ScaleForDpi(CARD_H_BASE);
+    const int gp = ScaleForDpi(GAP_BASE);
+    const int mg = ScaleForDpi(MARGIN_BASE);
+
+    const int popupW = COLS * cw + (COLS - 1) * gp + 2 * mg;
+    const int popupH = ROWS * ch + (ROWS - 1) * gp + 2 * mg;
+
+    // Default: anchor below the button, left-aligned
+    CPoint origin(buttonScreenRect.left, buttonScreenRect.bottom + ScaleForDpi(2));
+
+    // Fit to work area
+    MONITORINFO mi{ .cbSize = sizeof(mi) };
+    const HMONITOR hMon = MonitorFromPoint(origin, MONITOR_DEFAULTTONEAREST);
+    GetMonitorInfo(hMon, &mi);
+    const CRect work = mi.rcWork;
+
+    if (origin.x + popupW > work.right)
+        origin.x = work.right - popupW;
+    origin.x = std::max(origin.x, work.left);
+    if (origin.y + popupH > work.bottom)
+        origin.y = buttonScreenRect.top - popupH - ScaleForDpi(2);
+    origin.y = std::max(origin.y, work.top);
+
+    SetWindowPos(nullptr, origin.x, origin.y, popupW, popupH,
+        SWP_NOZORDER | SWP_SHOWWINDOW);
+    SetFocus();
+    SetCapture();
+    Invalidate();
+}
+
+void CLayoutPopup::DismissPopup(const bool cancel, const bool resetPositions)
+{
+    ShowWindow(SW_HIDE);
+
+    if (HasCapture())
+        ReleaseCapture();
+
+    if (HasFocus())
+        if (auto parent = GetParent())
+            parent.SetFocus();
+
+    if (!cancel)
+        CMainFrame::Get()->RebuildLayout(resetPositions);
+}
+
+CRect CLayoutPopup::CardRect(const int idx) const
+{
+    const int cw = ScaleForDpi(CARD_W_BASE);
+    const int ch = ScaleForDpi(CARD_H_BASE);
+    const int gp = ScaleForDpi(GAP_BASE);
+    const int mg = ScaleForDpi(MARGIN_BASE);
+
+    const int col = idx % COLS;
+    const int row = idx / COLS;
+    const int x   = mg + col * (cw + gp);
+    const int y   = mg + row * (ch + gp);
+
+    return { x, y, x + cw, y + ch };
+}
+
+int CLayoutPopup::CardAtPoint(const CPoint pt) const
+{
+    const auto range = std::views::iota(0, LayoutCount);
+    const auto it = std::ranges::find_if(range,
+        [&](const int i) { return CardRect(i).Contains(pt); });
+    return it != range.end() ? *it : -1;
+}
+
+static void DrawPaneHeader(CDC& dc, const CRect& r, const int rowH, const COLORREF hdr, const COLORREF sep)
+{
+    dc.FillSolidRect(r.left, r.top,            r.Width(), rowH + 1, hdr);
+    dc.FillSolidRect(r.left, r.top + 1 + rowH, r.Width(), 1,    sep);
+}
+
+static COLORREF GetPaneHeaderBackground()
+{
+    return DarkMode::SystemColor(COLOR_BTNFACE);
+}
+
+static COLORREF GetPaneHeaderSeparator()
+{
+    return DarkMode::SystemColor(DarkMode::IsDarkModeActive() ? COLOR_3DHIGHLIGHT : COLOR_3DSHADOW);
+}
+
+static COLORREF GetPaneHeaderTextColor()
+{
+    return DarkMode::IsDarkModeActive() ? RGB(176, 176, 176) : RGB(88, 88, 88);
+}
+
+static void DrawHeaderDivider(CDC& dc, const CRect& r, const int rowH, const int x, const COLORREF color)
+{
+    if (x <= r.left || x >= r.right) return;
+    dc.FillSolidRect(x, r.top + 1, 1, rowH, color);
+}
+
+static void DrawHeaderText(CDC& dc, CRect r, const int seed = 0)
+{
+    r.Deflate(2, 0);
+    if (r.Width() <= 2 || r.Height() <= 0) return;
+
+    constexpr int strokeH = 1;
+    const int y = r.top + (r.Height() - strokeH) / 2;
+    const int width = std::max(2, r.Width() * (55 + (seed % 3) * 10) / 100);
+    dc.FillSolidRect(r.left, y, std::min(width, r.Width()), strokeH, GetPaneHeaderTextColor());
+}
+
+static void DrawMiniText(CDC& dc, const CRect r, const int seed = 0)
+{
+    if (r.Width() <= 2 || r.Height() <= 0) return;
+
+    const COLORREF color = DarkMode::IsDarkModeActive() ? RGB(204, 204, 204) : RGB(52, 52, 52);
+    constexpr int strokeH = 1;
+    const int y = r.top + (r.Height() - strokeH) / 2;
+    const int first = std::max(2, r.Width() - (seed % 4));
+    dc.FillSolidRect(r.left, y, first, strokeH, color);
+}
+
+static COLORREF GetFileTreeColor(const int index)
+{
+    const int count = std::clamp(static_cast<int>(COptions::FileTreeColorCount), 1, TREELISTCOLORCOUNT);
+    return COptions::FileTreeColors[index % count];
+}
+
+void CLayoutPopup::DrawAllFilesPane(CDC& dc, const CRect r) const
+{
+    const COLORREF bg    = DarkMode::IsDarkModeActive() ? RGB(26, 24, 22)    : RGB(255, 254, 249);
+    const COLORREF alt   = DarkMode::IsDarkModeActive() ? RGB(34, 32, 28)    : RGB(247, 245, 240);
+    const COLORREF hdrBg = GetPaneHeaderBackground();
+    const COLORREF sep   = GetPaneHeaderSeparator();
+    constexpr COLORREF folio = RGB(228, 178, 36);
+
+    const int rowH  = ScaleForDpi(7);
+    const int iSz   = std::max(3, rowH - 2);
+    const int indU  = std::max(2, r.Width() / 9);
+    const int pColX = r.left + r.Width() * 54 / 100;
+
+    DrawPaneHeader(dc, r, rowH, hdrBg, sep);
+    DrawHeaderText(dc, CRect(r.left, r.top, pColX, r.top + rowH), 0);
+    DrawHeaderDivider(dc, r, rowH, pColX, sep);
+    DrawHeaderText(dc, CRect(pColX, r.top, r.right, r.top + rowH), 1);
+
+    struct Row { int ind; float pf; };
+    static constexpr std::array rows = {
+        Row{0, 0.95f}, Row{1, 0.37f}, Row{1, 0.29f}, Row{1, 0.16f},
+        Row{2, 0.10f}, Row{2, 0.07f}, Row{1, 0.04f}, Row{1, 0.02f},
+    };
+
+    for (const auto [i, row] : std::views::enumerate(rows))
+    {
+        const int y0 = r.top + 2 + rowH + static_cast<int>(i) * rowH;
+        if (y0 >= r.bottom) break;
+        const int y1 = std::min(y0 + rowH, static_cast<int>(r.bottom));
+
+        CRect rowR(r.left, y0, r.right, y1);
+        dc.FillSolidRect(rowR, i % 2 ? alt : bg);
+
+        const int ix = r.left + 2 + row.ind * indU;
+        const int iy = y0 + (rowH - iSz + 1) / 2;
+
+        if (ix + iSz < pColX - 2)
+        {
+            CRect ico(ix, iy, ix + iSz, iy + iSz);
+            dc.FillSolidRect(ico, folio);
+        }
+
+        const int tx  = ix + iSz + 2;
+        const int txW = (pColX - tx - 2) * 2 / 3;
+        if (tx < pColX - 4 && txW > 2)
+        {
+            const CRect txt(tx, iy, std::min(tx + txW, pColX - 2), iy + std::max(2, iSz - 1));
+            DrawMiniText(dc, txt, static_cast<int>(i));
+        }
+
+        const int pw = static_cast<int>((r.right - pColX - 2) * row.pf);
+        if (pw > 0)
+        {
+            CRect bar(pColX, iy, pColX + pw, iy + std::max(2, iSz - 1));
+            dc.FillSolidRect(bar, GetFileTreeColor(static_cast<int>(i)));
+        }
+    }
+}
+
+void CLayoutPopup::DrawFileTypesPane(CDC& dc, const CRect r) const
+{
+    const COLORREF bg    = DarkMode::IsDarkModeActive() ? RGB(22, 24, 26)    : RGB(249, 252, 255);
+    const COLORREF alt   = DarkMode::IsDarkModeActive() ? RGB(28, 30, 36)    : RGB(241, 245, 252);
+    const COLORREF hdrBg = GetPaneHeaderBackground();
+    const COLORREF sep   = GetPaneHeaderSeparator();
+
+    static constexpr std::array iconClr = {
+        RGB( 65, 115, 220),
+        RGB(185, 130,  40),
+        RGB( 45, 165,  80),
+        RGB( 55, 125, 200),
+        RGB(140, 140, 170),
+        RGB(190,  65,  65),
+        RGB( 45, 165, 165),
+        RGB(155,  65, 195),
+    };
+
+    const int rowH    = ScaleForDpi(7);
+    const int iSz     = std::max(3, rowH - 2);
+    const int extColW = r.Width() * 28 / 100;
+    const int numColX = r.left + r.Width() * 68 / 100;
+
+    DrawPaneHeader(dc, r, rowH, hdrBg, sep);
+    DrawHeaderText(dc, CRect(r.left, r.top, r.left + extColW, r.top + rowH), 0);
+    DrawHeaderDivider(dc, r, rowH, r.left + extColW, sep);
+    DrawHeaderText(dc, CRect(r.left + extColW, r.top, numColX, r.top + rowH), 1);
+    DrawHeaderDivider(dc, r, rowH, numColX, sep);
+    DrawHeaderText(dc, CRect(numColX, r.top, r.right, r.top + rowH), 2);
+
+    for (const auto [i, clr] : std::views::enumerate(iconClr))
+    {
+        const int y0 = r.top + 2 + rowH + static_cast<int>(i) * rowH;
+        if (y0 >= r.bottom) break;
+        const int y1 = std::min(y0 + rowH, static_cast<int>(r.bottom));
+
+        CRect rowR(r.left, y0, r.right, y1);
+        dc.FillSolidRect(rowR, i % 2 ? alt : bg);
+
+        const int iy = y0 + (rowH - iSz + 1) / 2;
+
+        CRect ico(r.left + 2, iy, r.left + 2 + iSz, iy + iSz);
+        if (ico.right < numColX - 2)
+            dc.FillSolidRect(ico, clr);
+
+        const int extX = ico.right + 2;
+        const int extW = r.left + extColW - extX;
+        if (extX < numColX - 4 && extW > 2)
+        {
+            const CRect extR(extX, iy, extX + extW, iy + std::max(2, iSz - 1));
+            DrawMiniText(dc, extR, static_cast<int>(i));
+        }
+
+        const int descX = r.left + extColW + 2;
+        const int descW = (numColX - descX - 2) * 3 / 4;
+        if (descX < numColX - 4 && descW > 2)
+        {
+            const CRect descR(descX, iy, descX + descW, iy + std::max(2, iSz - 1));
+            DrawMiniText(dc, descR, static_cast<int>(i + 1));
+        }
+
+        const int numW = (r.right - numColX - 2) * 2 / 3;
+        if (numW > 2)
+        {
+            const CRect numR(numColX + 2, iy, numColX + 2 + numW, iy + std::max(2, iSz - 1));
+            DrawMiniText(dc, numR, static_cast<int>(i + 2));
+        }
+    }
+}
+
+void CLayoutPopup::DrawVisualizationPane(CDC& dc, const CRect r, int /*cardIdx*/) const
+{
+    static const std::unique_ptr<CItem> demoRoot = CTreeMap::BuildDemoTree();
+    CTreeMap treeMap;
+    treeMap.DrawTreeMap(dc.Handle(), r, demoRoot.get(), &COptions::TreeMapOptions);
+}
+
+void CLayoutPopup::PaintCard(CDC& dc, const int idx) const
+{
+    const bool  selected = (idx == m_selectedLayout);
+    const bool  hovered  = (idx == m_hoveredLayout);
+
+    const CRect card = CardRect(idx);
+
+    // Card background
+    const COLORREF cardBg = DarkMode::IsDarkModeActive() ? RGB(38, 38, 38) : RGB(248, 248, 248);
+    dc.FillSolidRect(card, cardBg);
+
+    // Draw each pane in the card
+    const LayoutDef& ld = LAYOUTS[idx];
+    CRect inner = card;
+    inner.Deflate(3, 3);
+
+    const int pg = ScaleForDpi(4);  // gap inset applied to each pane edge
+
+    for (auto [viewType, x, y, w, h] : ld.PreviewPanes())
+    {
+        CRect pr(
+            inner.left + static_cast<int>(inner.Width()  * x) + pg,
+            inner.top  + static_cast<int>(inner.Height() * y) + pg,
+            inner.left + static_cast<int>(inner.Width()  * (x + w)) - pg,
+            inner.top  + static_cast<int>(inner.Height() * (y + h)) - pg
+        );
+        if (pr.Width() < 2 || pr.Height() < 2) continue;
+
+        switch (viewType)
+        {
+        case VT_ALLFILES : DrawAllFilesPane (dc, pr);       break;
+        case VT_FILETYPES: DrawFileTypesPane(dc, pr);       break;
+        case VT_VISUALIZATION: DrawVisualizationPane(dc, pr, idx); break;
+        }
+    }
+
+    const int borderWidth = (selected || hovered) ? 2 : 1;
+    const COLORREF borderColor = selected ? (DarkMode::IsDarkModeActive() ? RGB(100, 170, 255) : RGB(0, 102, 204))
+                               : hovered  ? (DarkMode::IsDarkModeActive() ? RGB(80,  145, 220) : RGB(60, 140, 220))
+                                          : (DarkMode::IsDarkModeActive() ? RGB(72,   72,  72) : RGB(195, 195, 195));
+
+    const CPen pen(PS_SOLID, borderWidth, borderColor);
+    GdiObjectSelection selectPen(&dc, &pen);
+    StockObjectSelection selectBrush(&dc, NULL_BRUSH);
+    const int adj = borderWidth - 1;
+    dc.Rectangle(card.left + adj, card.top + adj,
+                 card.right - adj, card.bottom - adj);
+
+    if (selected)
+    {
+        const int r = ScaleForDpi(5), cx = card.right - r - ScaleForDpi(3), cy = card.top + r + ScaleForDpi(3);
+        const CBrush brush(borderColor);
+        const CPen selectionPen(PS_SOLID, 1, borderColor);
+        GdiObjectSelection selectionBrush(&dc, &brush);
+        GdiObjectSelection selectionPenScope(&dc, &selectionPen);
+        dc.Ellipse(cx - r, cy - r, cx + r, cy + r);
+    }
+}
+
+bool CLayoutPopup::OnEraseBkgnd(CDC* pDC) const
+{
+    const CRect rc = GetClientRect();
+    const COLORREF bg = DarkMode::IsDarkModeActive() ? RGB(28, 28, 28) : RGB(240, 240, 240);
+    pDC->FillSolidRect(rc, bg);
+    return true;
+}
+
+void CLayoutPopup::OnPaint()
+{
+    CPaintDC dc(this);
+    for (const int i : std::views::iota(0, LayoutCount))
+        PaintCard(dc, i);
+}
+
+void CLayoutPopup::OnMouseMove(UINT /*nFlags*/, const CPoint point)
+{
+    const int hit = CardAtPoint(point);
+    if (hit != m_hoveredLayout)
+    {
+        m_hoveredLayout = hit;
+        Invalidate(false);
+    }
+
+    // Track mouse so WM_MOUSELEAVE fires when cursor leaves the window
+    TRACKMOUSEEVENT tme{ sizeof(tme), TME_LEAVE, Handle(), 0 };
+    TrackMouseEvent(&tme);
+}
+
+LRESULT CLayoutPopup::OnMouseLeave(WPARAM, LPARAM)
+{
+    if (m_hoveredLayout != -1)
+    {
+        m_hoveredLayout = -1;
+        Invalidate(false);
+    }
+    return 0;
+}
+
+void CLayoutPopup::OnLButtonDown(UINT /*nFlags*/, const CPoint point)
+{
+    if (CardAtPoint(point) < 0)
+        DismissPopup(true);
+}
+
+void CLayoutPopup::OnLButtonUp(UINT /*nFlags*/, const CPoint point)
+{
+    const int hit = CardAtPoint(point);
+    if (hit < 0)
+    {
+        DismissPopup(true);
+        return;
+    }
+
+    m_selectedLayout = hit;
+    COptions::WindowLayout = hit;
+    DismissPopup(false, true);
+}
+
+void CLayoutPopup::OnKeyDown(const UINT nChar, UINT /*nRepCnt*/, UINT /*nFlags*/)
+{
+    if (nChar == VK_ESCAPE) DismissPopup(true);
+}
+
+void CLayoutPopup::OnKillFocus(WindowRef /*pNewWnd*/)
+{
+    if (IsWindowVisible()) DismissPopup(true);
+}
+
+void CLayoutPopup::OnActivateApp(const bool bActive, DWORD /*dwThreadID*/)
+{
+    if (!bActive && IsWindowVisible()) DismissPopup(true);
+}
+
+void CLayoutPopup::OnCaptureChanged(WindowRef pWnd)
+{
+    if (pWnd.Handle() != Handle() && IsWindowVisible())
+        DismissPopup(true);
+}

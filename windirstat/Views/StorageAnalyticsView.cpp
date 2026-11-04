@@ -1,0 +1,712 @@
+﻿// WinDirStat - Windows Directory Statistics
+// Copyright © WinDirStat Team
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Distributed WITHOUT ANY WARRANTY; see LICENSE.md for details.
+
+#include "pch.h"
+#include "StorageAnalyticsView.h"
+
+void CCenteredEdit::OnNcCalcSize(const bool bCalcValidRects, NCCALCSIZE_PARAMS* lpncsp)
+{
+    CallDefaultHandler();
+    if (bCalcValidRects)
+    {
+        const CRect rect(lpncsp->rgrc[0]);
+        const HFONT font = GetFont();
+        LOGFONT lf{};
+        if (font != nullptr && GetObjectW(font, sizeof(LOGFONTW), &lf) != 0)
+        {
+            const int fontHeight = abs(lf.lfHeight);
+            if (const int rectHeight = rect.Height(); rectHeight > fontHeight)
+            {
+                int topPadding = (rectHeight - fontHeight) / 2;
+                if (topPadding > 1) topPadding--;
+                lpncsp->rgrc[0].top += topPadding;
+            }
+        }
+    }
+}
+
+void CCenteredEdit::OnChar(const UINT nChar, const UINT nRepCnt, UINT /*nFlags*/)
+{
+    if (nChar < 32)
+    {
+        CallDefaultHandler();
+        return;
+    }
+
+    const std::wstring text = GetText();
+
+    const auto [selStart, selEnd] = GetSel();
+
+    std::wstring candidate = text;
+    candidate.erase(static_cast<std::size_t>(selStart), static_cast<std::size_t>(selEnd - selStart));
+    const std::wstring insertion(static_cast<std::size_t>(nRepCnt), static_cast<wchar_t>(nChar));
+    candidate.insert(static_cast<std::size_t>(selStart), insertion);
+
+    const std::wstring_view candidateView(candidate);
+    const auto isDigit = [](const wchar_t ch) { return ch >= L'0' && ch <= L'9'; };
+    const auto isValid = m_isDecimal
+        ? std::ranges::count(candidateView, L'.') <= 1 &&
+            std::ranges::all_of(candidateView, [&](const wchar_t ch) { return isDigit(ch) || ch == L'.'; })
+        : std::ranges::all_of(candidateView, isDigit);
+
+    if (isValid)
+    {
+        CallDefaultHandler();
+    }
+    else
+    {
+        MessageBeep(MB_ICONWARNING);
+    }
+}
+
+CStorageAnalyticsView::CStorageAnalyticsView() = default;
+
+void CStorageAnalyticsView::OnSetFocus(WindowRef /*pOldWnd*/)
+{
+    CallDefaultHandler();
+    CMainFrame::Get()->SetLogicalFocus(LF_STORAGEANALYTICS);
+}
+
+int CStorageAnalyticsView::OnCreate(const LPCREATESTRUCT lpCreateStruct)
+{
+    if (CWinDirStatPane::OnCreate(lpCreateStruct) == -1)
+        return -1;
+
+    const CRect rect(0, 0, 0, 0);
+
+    const auto timeSuffixes = SplitString(Localization::Lookup(IDS_GENERIC_TIME_SUFFIXES), L',');
+    if (timeSuffixes.size() > 1) m_monthSuffix = timeSuffixes[1];
+
+    m_lblTitle.Create(Localization::Lookup(IDS_ANALYTICS_CONFIG).c_str(), WS_CHILD | WS_VISIBLE | SS_LEFT, rect, this);
+
+    // Dynamic Tier Parsing from comma-separated list
+    const std::vector<std::wstring> tierNames = SplitString(Localization::Lookup(IDS_TIERS), L',');
+
+    constexpr struct ColorPreset {
+        COLORREF bgLight, bgDark;
+        COLORREF borderLight, borderDark;
+        COLORREF accent;
+    } presets[] = {
+        { RGB(254, 242, 242), RGB(60, 32, 32), RGB(254, 202, 202), RGB(100, 48, 48), RGB(239, 68, 68) }, // Red (Hot)
+        { RGB(239, 246, 255), RGB(32, 45, 60), RGB(191, 219, 254), RGB(48, 68, 90), RGB(59, 130, 246) }, // Blue (Cool)
+        { RGB(245, 243, 255), RGB(42, 32, 55), RGB(216, 180, 254), RGB(68, 48, 90), RGB(139, 92, 246) }, // Purple (Cold)
+        { RGB(240, 253, 250), RGB(20, 50, 45), RGB(153, 246, 228), RGB(30, 75, 65), RGB(13, 148, 136) }  // Teal (Archive)
+    };
+    constexpr size_t numPresets = std::size(presets);
+
+    m_tiers.clear();
+    for (const auto [i, tierName] : std::views::enumerate(tierNames))
+    {
+        TierInfo tier;
+        tier.name = tierName;
+
+        const size_t presetIdx = i % numPresets;
+        tier.bgLight = presets[presetIdx].bgLight;
+        tier.bgDark = presets[presetIdx].bgDark;
+        tier.borderLight = presets[presetIdx].borderLight;
+        tier.borderDark = presets[presetIdx].borderDark;
+        tier.accent = presets[presetIdx].accent;
+
+        if (i > 0)
+        {
+            tier.lblThreshold = std::make_unique<CStatic>();
+            const std::wstring lblText = std::format(L"{} ({}):",
+                Localization::Format(IDS_ANALYTICS_THRESHOLD, tier.name), Localization::Lookup(IDS_GENERIC_DAYS));
+            tier.lblThreshold->Create(lblText.c_str(), WS_CHILD | WS_VISIBLE | SS_LEFT, rect, this);
+
+            tier.editThreshold = std::make_unique<CCenteredEdit>();
+            tier.editThreshold->Create(WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_AUTOHSCROLL, rect, this, 2000 + static_cast<int>(i) * 2);
+        }
+
+        tier.lblCost = std::make_unique<CStatic>();
+        tier.lblCost->Create(L"", WS_CHILD | WS_VISIBLE | SS_LEFT, rect, this);
+
+        tier.editCost = std::make_unique<CCenteredEdit>();
+        tier.editCost->m_isDecimal = true;
+        tier.editCost->Create(WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_AUTOHSCROLL, rect, this, 2000 + static_cast<int>(i) * 2 + 1);
+
+        m_tiers.push_back(std::move(tier));
+    }
+
+    m_lblUnit.Create(Localization::Lookup(IDS_ANALYTICS_UNIT).c_str(), WS_CHILD | WS_VISIBLE | SS_LEFT, rect, this);
+    m_comboUnit.Create(WS_CHILD | WS_VISIBLE | WS_TABSTOP | CBS_DROPDOWNLIST, rect, this, UnitId);
+
+    m_btnRecalculate.Create(Localization::Lookup(IDS_RECALCULATE).c_str(), WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON, rect, this, RecalculateId);
+
+    m_comboUnit.AddString(Localization::Lookup(IDS_SPEC_TiB));
+    m_comboUnit.AddString(Localization::Lookup(IDS_SPEC_GiB));
+    m_comboUnit.AddString(Localization::Lookup(IDS_SPEC_MiB));
+    m_comboUnit.AddString(Localization::Lookup(IDS_SPEC_KiB));
+    m_comboUnit.SetCurSel(1);
+
+    UpdateCostLabels();
+
+    OnFontSizeChanged(0, 0);
+
+    // Initialize edit fields with default values
+    static constexpr std::array defaultThresholds = { 0.0, 30.0, 180.0, 365.0 };
+    static constexpr std::array defaultCosts = { 0.03, 0.02, 0.1, 0.005 };
+    const size_t numDefaults = defaultThresholds.size();
+
+    for (const auto [i, tier] : std::views::enumerate(m_tiers))
+    {
+        if (tier.editThreshold)
+        {
+            const double defDays = (i < numDefaults) ? defaultThresholds[i] : (defaultThresholds.back() + (i - (numDefaults - 1)) * 100.0);
+            tier.editThreshold->SetText(std::to_wstring(static_cast<int>(defDays)));
+        }
+        double defCost = (i < numDefaults) ? defaultCosts[i] : (defaultCosts.back() / static_cast<double>(i - (numDefaults - 2)));
+        tier.editCost->SetText(std::format(L"{:.2f}", defCost));
+    }
+
+    DarkMode::AdjustControls(m_hWnd);
+
+    OnEditChange();
+
+    return 0;
+}
+
+void CStorageAnalyticsView::OnFontSizeChanged(int, int)
+{
+    m_fontLeftPanelTitle.Create(-ScaleForDpi(14), FW_BOLD, wds::strFontSegoeUI);
+    m_fontLeftPanel.Create(-ScaleForDpi(11), FW_NORMAL, wds::strFontSegoeUI);
+    m_lblTitle.SetFont(m_fontLeftPanelTitle);
+    m_lblUnit.SetFont(m_fontLeftPanel);
+    m_comboUnit.SetFont(m_fontLeftPanel);
+    m_btnRecalculate.SetFont(m_fontLeftPanel);
+    for (auto& tier : m_tiers)
+    {
+        if (tier.lblThreshold) tier.lblThreshold->SetFont(m_fontLeftPanel);
+        if (tier.editThreshold) tier.editThreshold->SetFont(m_fontLeftPanel);
+        tier.lblCost->SetFont(m_fontLeftPanel);
+        tier.editCost->SetFont(m_fontLeftPanel);
+    }
+    const CRect rc = GetClientRect();
+    OnSize(SIZE_RESTORED, rc.Width(), rc.Height());
+}
+
+void CStorageAnalyticsView::OnSize(UINT /*nType*/, int /*cx*/, int /*cy*/)
+{
+    const int panelX = ScaleForDpi(15);
+    const int panelW = ScaleForDpi(180);
+    const int controlH = ScaleForDpi(20);
+    const int labelH = ScaleForDpi(18);
+    const int spacing = ScaleForDpi(5);
+
+    int currentY = ScaleForDpi(15);
+    m_lblTitle.MoveWindow(panelX, currentY, panelW, controlH);
+    currentY += controlH + spacing;
+
+    const auto placeField = [&](CStatic* label, CWnd* control, const int windowHeight)
+    {
+        if (label == nullptr || control == nullptr || !label->Handle()) return;
+        label->MoveWindow(panelX, currentY, panelW, labelH);
+        currentY += labelH;
+        control->MoveWindow(panelX, currentY, panelW, windowHeight);
+        currentY += controlH + spacing;
+    };
+
+    for (const auto& tier : m_tiers)
+        placeField(tier.lblThreshold.get(), tier.editThreshold.get(), controlH);
+    placeField(&m_lblUnit, &m_comboUnit, ScaleForDpi(150));
+    for (const auto& tier : m_tiers)
+        placeField(tier.lblCost.get(), tier.editCost.get(), controlH);
+
+    if (m_btnRecalculate.Handle())
+    {
+        m_btnRecalculate.MoveWindow(panelX, currentY + ScaleForDpi(5), panelW, ScaleForDpi(28));
+    }
+
+    Invalidate();
+}
+
+HBRUSH CStorageAnalyticsView::OnCtlColor(CDC* pDC, WindowRef /*pWnd*/, const UINT nCtlColor)
+{
+    if (nCtlColor == CTLCOLOR_STATIC)
+    {
+        const COLORREF bg = DarkMode::SystemColor(COLOR_3DFACE);
+        pDC->SetTextColor(DarkMode::SystemColor(COLOR_WINDOWTEXT));
+        pDC->SetBkColor(bg);
+        pDC->SetBkMode(TRANSPARENT);
+        static COLORREF lastBg = CLR_INVALID;
+        static CBrush brush;
+        if (bg != lastBg)
+        {
+            brush.CreateSolid(bg);
+            lastBg = bg;
+        }
+        return brush;
+    }
+    if (DarkMode::IsDarkModeActive())
+    {
+        const HBRUSH brush = DarkMode::OnCtlColor(pDC, nCtlColor);
+        return brush ? brush : reinterpret_cast<HBRUSH>(CallDefaultHandler());
+    }
+    return reinterpret_cast<HBRUSH>(CallDefaultHandler());
+}
+
+void CStorageAnalyticsView::OnBtnRecalculate()
+{
+    Recalculate();
+}
+
+bool CStorageAnalyticsView::PreprocessMessage(MSG* pMsg)
+{
+    if (pMsg->message >= WM_KEYFIRST && pMsg->message <= WM_KEYLAST)
+    {
+        const auto pFocus = GetFocus();
+        if (pFocus && pFocus.GetParent().Handle() == Handle())
+        {
+            TCHAR className[16]{};
+            if (::GetClassName(pFocus.m_hWnd, className, 16) &&
+                _tcsicmp(className, _T("Edit")) == 0)
+            {
+                bool shouldBypass = false;
+                if (pMsg->wParam == VK_DELETE || pMsg->wParam == VK_BACK)
+                {
+                    shouldBypass = true;
+                }
+                else if (IsKeyDown(VK_CONTROL))
+                {
+                    const TCHAR ch = static_cast<TCHAR>(pMsg->wParam);
+                    if (ch == _T('C') || ch == _T('V') || ch == _T('X') || ch == _T('A'))
+                    {
+                        shouldBypass = true;
+                    }
+                }
+
+                if (shouldBypass)
+                {
+                    TranslateMessage(pMsg);
+                    ::DispatchMessage(pMsg);
+                    return true;
+                }
+            }
+        }
+    }
+    return CWinDirStatPane::PreprocessMessage(pMsg);
+}
+
+bool CStorageAnalyticsView::ReadParameters(const bool apply)
+{
+    struct Parameters
+    {
+        bool active;
+        double thresholdDays;
+        double costGiB;
+    };
+
+    std::wstring text;
+    std::vector<Parameters> parameters;
+    parameters.reserve(m_tiers.size());
+    double lastThreshold = 0.0;
+    bool hasLastActive = false;
+
+    const auto ParseText = [&](double& value, const bool allowZero) {
+        wchar_t* end = nullptr;
+        value = std::wcstod(text.c_str(), &end);
+        return end != text.c_str() && *end == L'\0' && std::isfinite(value) &&
+            (allowZero ? value >= 0.0 : value > 0.0);
+    };
+
+    for (auto&& [i, tier] : std::views::enumerate(m_tiers))
+    {
+        bool active = (i == 0);
+        double thresholdDays = 0.0;
+        if (tier.editThreshold)
+        {
+            text = tier.editThreshold->GetText();
+            TrimString(text);
+            active = !text.empty();
+            if (active && (!ParseText(thresholdDays, false)
+                || hasLastActive && lastThreshold >= thresholdDays)) return false;
+            if (active) lastThreshold = thresholdDays;
+            hasLastActive |= active;
+        }
+
+        double costGiB = 0.0;
+        if (active)
+        {
+            text = tier.editCost->GetText();
+            TrimString(text);
+            if (!ParseText(costGiB, true)) return false;
+        }
+        parameters.push_back({ active, thresholdDays, costGiB });
+    }
+
+    if (!apply) return true;
+    for (auto&& [tier, param] : std::views::zip(m_tiers, parameters))
+    {
+        tier.active = param.active;
+        tier.thresholdDays = param.thresholdDays;
+        tier.costGiB = param.costGiB;
+        tier.filesCount = 0;
+        tier.totalSize = 0;
+    }
+    return true;
+}
+
+void CStorageAnalyticsView::OnEditChange()
+{
+    m_btnRecalculate.EnableWindow(ReadParameters(false));
+}
+
+void CStorageAnalyticsView::OnEditChangeRange(UINT)
+{
+    OnEditChange();
+}
+
+void CStorageAnalyticsView::OnUpdate(CWnd* /*sender*/, const MODEL_CHANGE change, CItem* /*item*/)
+{
+    if (change == MODEL_CHANGE_NEW_ROOT || change == MODEL_CHANGE_NONE)
+    {
+        const auto* model = CWinDirStatModel::Get();
+        if (change == MODEL_CHANGE_NEW_ROOT || !model->IsScanSettled())
+        {
+            m_binsDirty = true;
+            m_hasData = false;
+        }
+        Invalidate();
+    }
+}
+
+void CStorageAnalyticsView::Recalculate()
+{
+    const auto* model = CWinDirStatModel::Get();
+    m_binsDirty = false;
+    if (!model->IsScanSettled() || !ReadParameters(true))
+    {
+        m_hasData = false;
+        Invalidate();
+        return;
+    }
+
+    const FILETIME now = CurrentSystemFileTime();
+
+    CWaitCursor wait;
+    Traverse(model->GetRootItem(), now);
+
+    m_hasData = true;
+    Invalidate();
+}
+
+void CStorageAnalyticsView::Traverse(CItem* item, const FILETIME now)
+{
+    if (item->HasChildren())
+    {
+        for (CItem* child : item->GetChildren())
+        {
+            Traverse(child, now);
+        }
+    }
+    else if (item->IsTypeOrFlag(IT_FILE))
+    {
+        const ULONGLONG size = item->GetSizeLogical();
+        const FILETIME lastChange = item->GetLastChange();
+        const ULONGLONG nowVal = std::bit_cast<std::uint64_t>(now);
+        const ULONGLONG changeVal = std::bit_cast<std::uint64_t>(lastChange);
+        const double ageInDays = nowVal > changeVal ?
+            static_cast<double>(nowVal - changeVal) / 864000000000.0 : 0.0;
+
+        bool binned = false;
+        for (int i = static_cast<int>(m_tiers.size()) - 1; i >= 1; --i)
+        {
+            if (m_tiers[i].active && ageInDays >= m_tiers[i].thresholdDays)
+            {
+                m_tiers[i].filesCount++;
+                m_tiers[i].totalSize += size;
+                binned = true;
+                break;
+            }
+        }
+        if (!binned)
+        {
+            m_tiers[0].filesCount++;
+            m_tiers[0].totalSize += size;
+        }
+    }
+}
+
+double CStorageAnalyticsView::GetScaleForSelection(const int sel) const
+{
+    static constexpr std::array scales = {
+        static_cast<double>(wds::Ti),
+        static_cast<double>(wds::Gi),
+        static_cast<double>(wds::Mi),
+        static_cast<double>(wds::Ki),
+    };
+    return scales[(sel >= 0 && sel < static_cast<int>(scales.size())) ? sel : 3];
+}
+
+double CStorageAnalyticsView::GetActiveUnitScale() const
+{
+    int sel = m_comboUnit.GetCurSel();
+    if (sel == CB_ERR) sel = 1;
+    return GetScaleForSelection(sel);
+}
+
+void CStorageAnalyticsView::UpdateCostLabels() const
+{
+    int sel = m_comboUnit.GetCurSel();
+    if (sel == CB_ERR) sel = 1;
+
+    const std::wstring unit = m_comboUnit.GetItemText(sel);
+
+    for (auto& tier : m_tiers)
+    {
+        tier.lblCost->SetText(std::format(L"{} ($/{}/{}):",
+            Localization::Format(IDS_ANALYTICS_COST, tier.name), unit, m_monthSuffix));
+    }
+}
+
+void CStorageAnalyticsView::OnComboUnitSelChange()
+{
+    const int newSel = m_comboUnit.GetCurSel();
+    if (newSel == CB_ERR) return;
+
+    if (newSel != m_lastUnitSel)
+    {
+        const double oldScale = GetScaleForSelection(m_lastUnitSel);
+        const double newScale = GetScaleForSelection(newSel);
+        const double ratio = newScale / oldScale;
+
+        auto ScaleEditField = [&](CCenteredEdit& edit) {
+            std::wstring text = edit.GetText();
+            TrimString(text);
+            wchar_t* end = nullptr;
+            double val = std::wcstod(text.c_str(), &end);
+            if (val > 0 && std::isfinite(val) && end != text.c_str() && *end == L'\0')
+            {
+                val *= ratio;
+                std::wstring formatted = std::format(L"{:.8f}", val);
+                TrimString(formatted, L'0', true);
+                TrimString(formatted, L'.', true);
+                edit.SetText(formatted);
+            }
+        };
+
+        for (auto& tier : m_tiers)
+        {
+            ScaleEditField(*tier.editCost);
+            tier.costGiB *= ratio;
+        }
+
+        m_lastUnitSel = newSel;
+    }
+
+    UpdateCostLabels();
+    Invalidate();
+}
+
+void CStorageAnalyticsView::OnDraw(CDC* pDC)
+{
+    if (m_binsDirty && IsWindowVisible() && CWinDirStatModel::Get()->IsScanSettled()) Recalculate();
+    const CRect clientRect = GetClientRect();
+
+    CDC memDC(pDC);
+    CBitmap memBitmap(pDC, clientRect.Width(), clientRect.Height());
+
+    GdiObjectSelection selectBitmap(&memDC, &memBitmap);
+
+    const COLORREF bgControl = DarkMode::SystemColor(COLOR_3DFACE);
+    const COLORREF fgText = DarkMode::SystemColor(COLOR_WINDOWTEXT);
+    const COLORREF fgMuted = DarkMode::SystemColor(COLOR_GRAYTEXT);
+    const COLORREF clrBorder = DarkMode::SystemColor(COLOR_3DSHADOW);
+
+    memDC.FillSolidRect(clientRect, bgControl);
+
+    const int leftWidth = ScaleForDpi(210);
+    CRect rightRect = clientRect;
+    rightRect.left = leftWidth;
+    memDC.FillSolidRect(rightRect, DarkMode::IsDarkModeActive() ? RGB(26, 26, 28) : RGB(246, 246, 249));
+
+    CPen penBorder(PS_SOLID, 1, clrBorder);
+    {
+        GdiObjectSelection selectPen(&memDC, &penBorder);
+        memDC.MoveTo(leftWidth, 0);
+        memDC.LineTo(leftWidth, clientRect.Height());
+    }
+
+    CFont fontTitle(-ScaleForDpi(20), FW_BOLD, wds::strFontSegoeUI);
+    CFont fontCardVal(-ScaleForDpi(18), FW_BOLD, wds::strFontSegoeUI);
+    CFont fontCardLbl(-ScaleForDpi(11), FW_NORMAL, wds::strFontSegoeUI);
+    CFont fontBody(-ScaleForDpi(12), FW_NORMAL, wds::strFontSegoeUI);
+
+    ScopedBkMode setBkMode(&memDC, TRANSPARENT);
+    ScopedTextColor setTextColor(&memDC, fgText);
+    const auto DrawText = [&](CFont& font, const COLORREF color, const int x, const int y,
+        const std::wstring& text) {
+        GdiObjectSelection selectFont(&memDC, &font);
+        ScopedTextColor selectColor(&memDC, color);
+        memDC.TextOut(x, y, text);
+    };
+    DrawText(fontTitle, fgText, leftWidth + ScaleForDpi(20), ScaleForDpi(20),
+        Localization::Lookup(IDS_ANALYTICS_TITLE));
+
+    if (!m_hasData || m_tiers.empty())
+    {
+        GdiObjectSelection selectFont(&memDC, &fontTitle);
+        ScopedTextColor setMuted(&memDC, fgMuted);
+        CRect msgRect = rightRect;
+        msgRect.Deflate(ScaleForDpi(50), ScaleForDpi(150));
+        memDC.DrawTextW(Localization::Lookup(IDS_ANALYTICS_NO_STATISTICS), &msgRect, DT_CENTER | DT_WORDBREAK);
+    }
+    else
+    {
+        auto activeTiers = m_tiers | std::views::filter(&TierInfo::active);
+        const double scale = GetActiveUnitScale();
+        const ULONGLONG totalSize = std::ranges::fold_left(m_tiers, static_cast<ULONGLONG>(0),
+            [](const ULONGLONG total, const TierInfo& tier) { return total + tier.totalSize; });
+        const double totalUnit = static_cast<double>(totalSize) / scale;
+
+        const double currentCost = totalUnit * m_tiers[0].costGiB;
+        const double optimizedCost = std::ranges::fold_left(activeTiers, 0.0,
+            [scale](const double total, const TierInfo& tier) {
+            return total + static_cast<double>(tier.totalSize) / scale * tier.costGiB;
+            });
+        const double savings = std::max(0.0, currentCost - optimizedCost);
+        const double savingsPct = currentCost > 0.0 ? (savings / currentCost) * 100.0 : 0.0;
+        const auto formatMonthlyCost = [this](const double cost) {
+            return std::format(L"${:.2f}/{}", cost, m_monthSuffix);
+        };
+
+        // Draw Metric Cards
+        const int barW = ScaleForDpi(765);
+        const int cardGap = ScaleForDpi(15);
+        const int cardH = ScaleForDpi(95);
+        const int cardY = ScaleForDpi(70);
+
+        struct CardDrawData {
+            const TierInfo* tier;
+            std::wstring legendDesc;
+        };
+        std::vector<CardDrawData> activeCards;
+
+        const std::wstring daysStr = Localization::Lookup(IDS_GENERIC_DAYS);
+        for (auto tier = activeTiers.begin(); tier != activeTiers.end(); ++tier)
+        {
+            const auto next = std::next(tier);
+            std::wstring range;
+            if (&*tier == &m_tiers.front())
+            {
+                range = next != activeTiers.end() ? std::format(L"<{:.0f} {}", next->thresholdDays, daysStr) :
+                    Localization::Lookup(IDS_ALL_FILES);
+            }
+            else
+            {
+                range = next != activeTiers.end() ? std::format(L"{:.0f}-{:.0f} {}", tier->thresholdDays, next->thresholdDays, daysStr) :
+                    std::format(L">{:.0f} {}", tier->thresholdDays, daysStr);
+            }
+            activeCards.push_back({ &*tier, std::format(L"{} ({})", tier->name, range) });
+        }
+
+        const int activeCount = static_cast<int>(activeCards.size());
+        const int cardW = (barW - (activeCount - 1) * cardGap) / (activeCount > 0 ? activeCount : 1);
+
+        for (const auto [i, card] : std::views::enumerate(activeCards))
+        {
+            const auto& tier = *card.tier;
+            const int cardX = leftWidth + ScaleForDpi(20) + static_cast<int>(i) * (cardW + cardGap);
+            CRect rcCard(cardX, cardY, cardX + cardW, cardY + cardH);
+
+            memDC.FillSolidRect(rcCard, DarkMode::IsDarkModeActive() ? tier.bgDark : tier.bgLight);
+            CBrush brBorder(DarkMode::IsDarkModeActive() ? tier.borderDark : tier.borderLight);
+            memDC.FrameRect(&rcCard, &brBorder);
+
+            constexpr int accentBarW = 4;
+            CRect rcAccent = rcCard;
+            rcAccent.right = rcAccent.left + ScaleForDpi(accentBarW);
+            memDC.FillSolidRect(rcAccent, tier.accent);
+
+            const int textX = rcCard.left + ScaleForDpi(12);
+            DrawText(fontCardLbl, fgMuted, textX, rcCard.top + ScaleForDpi(10), tier.name);
+            DrawText(fontCardVal, fgText, textX, rcCard.top + ScaleForDpi(30), FormatSizeSuffixes(tier.totalSize));
+            DrawText(fontBody, fgMuted, textX, rcCard.top + ScaleForDpi(53),
+                std::format(L"{} {}", FormatCount(tier.filesCount), Localization::Lookup(IDS_COL_FILES)));
+            DrawText(fontCardVal, tier.accent, textX, rcCard.top + ScaleForDpi(70),
+                formatMonthlyCost(static_cast<double>(tier.totalSize) / scale * tier.costGiB));
+        }
+
+        // Draw Distribution Bars
+        const int barH = ScaleForDpi(16);
+        const int barX = leftWidth + ScaleForDpi(20);
+
+        auto DrawSegmentedBar = [&](const int yPos, const std::wstring& barLabel, const bool sizeBar) {
+            DrawText(fontBody, fgText, barX, yPos - ScaleForDpi(18), barLabel);
+            const auto valueOf = [sizeBar](const TierInfo& tier) {
+                return static_cast<double>(sizeBar ? tier.totalSize : tier.filesCount);
+            };
+            const double totalVal = std::ranges::fold_left(activeTiers | std::views::transform(valueOf), 0.0, std::plus{});
+
+            int currentX = barX;
+            COLORREF remainderColor = m_tiers[0].accent;
+
+            for (const auto& tier : activeTiers)
+            {
+                const double value = valueOf(tier);
+                if (value <= 0 || totalVal <= 0) continue;
+                remainderColor = tier.accent;
+                const int width = static_cast<int>((value / totalVal) * barW);
+                if (width <= 0) continue;
+                memDC.FillSolidRect(CRect(currentX, yPos, currentX + width, yPos + barH), tier.accent);
+                currentX += width;
+            }
+
+            if (totalVal > 0 && currentX < barX + barW)
+                memDC.FillSolidRect(CRect(currentX, yPos, barX + barW, yPos + barH), remainderColor);
+
+            const CRect rcFrame(barX, yPos, barX + barW, yPos + barH);
+            CBrush brFrame(clrBorder);
+            memDC.FrameRect(&rcFrame, &brFrame);
+        };
+
+        DrawSegmentedBar(ScaleForDpi(205), Localization::Lookup(IDS_ANALYTICS_FILE_DISTRIBUTION), false);
+        DrawSegmentedBar(ScaleForDpi(245), Localization::Lookup(IDS_ANALYTICS_CAPACITY_DISTRIBUTION), true);
+
+        // Draw Legends
+        const int legendY = ScaleForDpi(270);
+        const int legendColW = barW / (activeCount > 0 ? activeCount : 1);
+        for (const auto [i, card] : std::views::enumerate(activeCards))
+        {
+            const int legendX = barX + static_cast<int>(i) * legendColW;
+            CRect rcColor(legendX, legendY + ScaleForDpi(2), legendX + ScaleForDpi(10), legendY + ScaleForDpi(12));
+            memDC.FillSolidRect(rcColor, card.tier->accent);
+            CBrush brLegend(clrBorder);
+            memDC.FrameRect(&rcColor, &brLegend);
+
+            DrawText(fontBody, fgText, legendX + ScaleForDpi(16), legendY, card.legendDesc);
+        }
+
+        // Draw Storage Cost Savings Banner
+        CRect rcSavings(barX, ScaleForDpi(300), barX + barW, ScaleForDpi(385));
+        const COLORREF bgSavings = DarkMode::IsDarkModeActive() ? RGB(32, 50, 36) : RGB(240, 253, 244);
+        const COLORREF borderSavings = DarkMode::IsDarkModeActive() ? RGB(48, 80, 52) : RGB(187, 247, 208);
+        const COLORREF textSavings = DarkMode::IsDarkModeActive() ? RGB(74, 222, 128) : RGB(22, 163, 74);
+
+        memDC.FillSolidRect(rcSavings, bgSavings);
+        CBrush brSavings(borderSavings);
+        memDC.FrameRect(&rcSavings, &brSavings);
+
+        constexpr int numSavingsColumns = 3;
+        const int colW = barW / numSavingsColumns;
+
+        const int labelY = rcSavings.top + ScaleForDpi(15);
+        DrawText(fontCardLbl, fgMuted, rcSavings.left + ScaleForDpi(15), labelY,
+            Localization::Lookup(IDS_CURRENT_COST_LABEL));
+        DrawText(fontCardVal, fgText, rcSavings.left + ScaleForDpi(15),
+            rcSavings.top + ScaleForDpi(38), formatMonthlyCost(currentCost));
+        DrawText(fontCardLbl, fgMuted, rcSavings.left + colW + ScaleForDpi(10), labelY,
+            Localization::Lookup(IDS_OPTIMIZED_COST_LABEL));
+        DrawText(fontCardVal, fgText, rcSavings.left + colW + ScaleForDpi(10),
+            rcSavings.top + ScaleForDpi(38), formatMonthlyCost(optimizedCost));
+        DrawText(fontCardLbl, textSavings, rcSavings.left + colW * 2 + ScaleForDpi(10), labelY,
+            Localization::Lookup(IDS_STORAGE_SAVINGS));
+        DrawText(fontTitle, textSavings, rcSavings.left + colW * 2 + ScaleForDpi(10),
+            rcSavings.top + ScaleForDpi(36), std::format(L"{} ({:.1f}%)", formatMonthlyCost(savings), savingsPct));
+    }
+
+    pDC->BitBlt(0, 0, clientRect.Width(), clientRect.Height(), &memDC, 0, 0, SRCCOPY);
+}

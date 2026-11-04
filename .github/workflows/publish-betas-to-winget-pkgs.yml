@@ -1,0 +1,68 @@
+name: Publish betas to WinGet
+on:
+  release:
+    types: [published]
+jobs:
+  publish:
+    runs-on: windows-latest
+    steps:
+      - name: Get version
+        id: get-version
+        run: |
+          Write-Host "github.ref_name: ${{ github.ref_name }}"
+          Write-Host "github.ref: ${{ github.ref }}"        
+          # Finding the version from beta tag name
+          if ("${{ github.ref_name }}" -imatch "^beta/")
+          {
+              $VERSION="${{ github.ref_name }}" -ireplace '^beta/v?' -ireplace '/', '.'
+              "version=$VERSION" >> $env:GITHUB_OUTPUT
+              "skip=false" >> $env:GITHUB_OUTPUT
+          }
+          else
+          {
+              "skip=true" >> $env:GITHUB_OUTPUT
+          }
+        shell: pwsh
+      - uses: actions/checkout@v7.0.1
+        if: ${{ steps.get-version.outputs.skip != 'true' }}
+      - name: Install WinGet validator
+        if: ${{ steps.get-version.outputs.skip != 'true' }}
+        run: |
+          Install-Module Microsoft.WinGet.Client -Repository PSGallery -Scope CurrentUser -Force
+          Repair-WinGetPackageManager -Latest -Force | Out-Null
+          $appsPath = Join-Path $env:LOCALAPPDATA "Microsoft\WindowsApps"
+          $env:PATH += ";$appsPath"
+          $appsPath >> $env:GITHUB_PATH
+          winget --version
+          if ($LASTEXITCODE -ne 0) { throw "WinGet validator is unavailable." }
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - uses: cargo-bins/cargo-binstall@7bebc2e59eb8820162b7ac8f62a92bfdb2732447 # v1.25.1
+        if: ${{ steps.get-version.outputs.skip != 'true' }}
+        with:
+          version: v1.25.1
+      - name: Install Komac 2.16.0
+        if: ${{ steps.get-version.outputs.skip != 'true' }}
+        # Generate manifests locally so installer and locale checks can run before submission.
+        run: |
+          cargo binstall komac@2.16.0 --no-confirm
+          if ((komac --version) -ne "komac 2.16.0") { throw "Unexpected Komac version." }
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - name: Validate and publish WinGet manifests
+        if: ${{ steps.get-version.outputs.skip != 'true' }}
+        run: |
+          $Parameters = @{
+              PackageIdentifier = "WinDirStat.WinDirStat.Beta"
+              PackageVersion = "${{ steps.get-version.outputs.version }}"
+              ReleaseRepository = "${{ github.repository }}"
+              ReleaseTag = "${{ github.ref_name }}"
+          }
+          .\.github\scripts\Publish-WinGetPackage.ps1 @Parameters
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.WINGET_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.WINGET_TOKEN }}
+          KOMAC_FORK_OWNER: ${{ github.repository_owner }}

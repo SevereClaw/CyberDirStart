@@ -1,0 +1,29 @@
+name: Build WinDirStat (Cyberpunk)
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-2025
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [x64, Win32]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: microsoft/setup-msbuild@v2
+
+      - name: Build
+        shell: cmd
+        run: msbuild windirstat.sln /m /p:Configuration=Release /p:Platform=${{ matrix.platform }} /t:windirstat
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: WinDirStat-Cyberpunk-${{ matrix.platform }}
+          path: build/*.exe
+          if-no-files-found: error

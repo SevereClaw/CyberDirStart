@@ -1,0 +1,95 @@
+﻿// WinDirStat - Windows Directory Statistics
+// Copyright © WinDirStat Team
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Distributed WITHOUT ANY WARRANTY; see LICENSE.md for details.
+
+#pragma once
+
+#include "pch.h"
+#include "Finder.h"
+
+class FinderNtfsContext final
+{
+    friend class FinderNtfs;
+
+    using FileRecordBase = struct FileRecordBase
+    {
+        ULONGLONG LogicalSize = 0;
+        ULONGLONG PhysicalSize = 0;
+        FILETIME LastModifiedTime = {};
+        ULONG Attributes = 0;
+        DWORD ReparsePointTag = 0;
+        bool HasIgnoredStream = false;
+        bool HasWofData = false;
+        bool HasData = false;
+        bool HasStandardInfo = false;
+        bool IsPresent = false;
+    };
+
+    using FileRecordName = struct FileRecordName
+    {
+        ULONGLONG FileReference = 0;
+        ULONG NameOffset = 0;
+        USHORT NameLength = 0;
+        USHORT NameArena = 0;
+
+        constexpr FileRecordName(const ULONGLONG fileReference, const ULONG nameOffset,
+            const USHORT nameLength, const USHORT nameArena) noexcept :
+            FileReference(fileReference), NameOffset(nameOffset),
+            NameLength(nameLength), NameArena(nameArena) {}
+    };
+
+    std::vector<FileRecordBase> m_baseFileRecords;
+    std::vector<std::vector<wchar_t>> m_nameArenas;
+    std::unordered_map<ULONGLONG, std::vector<FileRecordName>> m_parentToChildMap;
+
+    bool m_isLoaded = false;
+
+    std::wstring_view GetName(const FileRecordName& rec) const noexcept
+    {
+        return { m_nameArenas[rec.NameArena].data() + rec.NameOffset, rec.NameLength };
+    }
+
+public:
+
+    FinderNtfsContext() = default;
+    bool LoadRoot(CItem* driveitem, BlockingQueue<CItem*>* queue);
+    bool IsLoaded() const { return m_isLoaded; }
+
+    static constexpr ULONGLONG NtfsRecordMask = (1ull << 48) - 1;
+    static constexpr ULONGLONG NtfsNodeRoot = 5;
+    static constexpr ULONGLONG NtfsReservedMax = 16;
+};
+
+class FinderNtfs final : public Finder
+{
+    FinderNtfsContext* m_master = nullptr;
+    FinderNtfsContext::FileRecordBase* m_currentRecord = nullptr;
+    const FinderNtfsContext::FileRecordName* m_currentRecordName = nullptr;
+
+    std::vector<FinderNtfsContext::FileRecordName>::const_iterator m_recordIteratorEnd;
+    std::vector<FinderNtfsContext::FileRecordName>::const_iterator m_recordIterator;
+
+    std::wstring m_base;
+    ULONGLONG m_index = 0;
+    ScanResult m_result{ ScanOutcome::Complete, {} };
+
+public:
+
+    explicit FinderNtfs(FinderNtfsContext* master) : m_master(master) {}
+
+    bool FindNext() override;
+    bool FindFile(const CItem* item) override;
+    DWORD GetAttributes() const override { return m_currentRecord->Attributes; }
+    ULONGLONG GetIndex() const override { return m_currentRecordName->FileReference; }
+    DWORD GetReparseTag() const override { return m_currentRecord->ReparsePointTag; }
+    std::wstring_view GetFileName() const override { return m_master->GetName(*m_currentRecordName); }
+    ULONGLONG GetFileSizePhysical() const override { return m_currentRecord->PhysicalSize; }
+    ULONGLONG GetFileSizeLogical() const override { return m_currentRecord->LogicalSize; }
+    FILETIME GetLastWriteTime() const override { return m_currentRecord->LastModifiedTime; }
+    std::wstring GetFilePath() const override;
+    bool IsReserved() const override { return m_index < FinderNtfsContext::NtfsReservedMax; }
+    bool HasIgnoredStream() const override { return m_currentRecord->HasIgnoredStream; }
+    const ScanResult& GetResult() const noexcept override { return m_result; }
+};

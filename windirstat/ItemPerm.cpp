@@ -1,0 +1,184 @@
+﻿// WinDirStat - Windows Directory Statistics
+// Copyright © WinDirStat Team
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Distributed WITHOUT ANY WARRANTY; see LICENSE.md for details.
+
+#include "pch.h"
+#include "ItemPerm.h"
+
+std::atomic<int> CItemPerm::m_ruleVersion = 0;
+
+// Cumulative rights required to satisfy each summarized level
+static constexpr std::array<ACCESS_MASK, PERMSLEVEL_COUNT> levelMasks =
+{
+    FILE_ALL_ACCESS,
+    FILE_GENERIC_READ | FILE_GENERIC_WRITE | FILE_GENERIC_EXECUTE | DELETE,
+    FILE_GENERIC_READ | FILE_GENERIC_EXECUTE,
+    FILE_GENERIC_READ,
+    FILE_GENERIC_WRITE,
+    0
+};
+
+CItemPerm::CItemPerm(std::shared_ptr<const Snapshot> snapshot, std::wstring account,
+    const ACCESS_MASK mask, const bool deny, const BYTE aceFlags, const bool inheritanceDisabled) :
+    m_snapshot(std::move(snapshot)), m_account(std::move(account)), m_mask(mask),
+    m_isContainer((m_snapshot->attributes & FILE_ATTRIBUTE_DIRECTORY) != 0),
+    m_level(ComputeRightsLevel(mask)), m_applies(ComputeApplies(aceFlags, m_isContainer)), m_deny(deny),
+    m_inheritanceDisabled(inheritanceDisabled)
+{
+}
+
+std::wstring CItemPerm::GetText(const int subitem) const
+{
+    if (subitem == COL_ITEMPERM_NAME) return m_snapshot->path;
+    if (subitem == COL_ITEMPERM_ACCOUNT) return m_account;
+    if (subitem == COL_ITEMPERM_TYPE) return GetAccessTypeName(m_deny);
+    if (subitem == COL_ITEMPERM_RIGHTS) return m_level == PERMSLEVEL_SPECIAL ?
+        std::format(L"{} (0x{:08X})", GetRightsLevelName(m_level), m_mask) : GetRightsLevelName(m_level);
+    if (subitem == COL_ITEMPERM_APPLIESTO) return GetAppliesText();
+    if (subitem == COL_ITEMPERM_INHERITANCE) return GetInheritedName(m_inheritanceDisabled);
+    return {};
+}
+
+int CItemPerm::CompareSibling(const CTreeListItem* other, const int subitem) const
+{
+    const auto* otherItem = static_cast<const CItemPerm*>(other);
+    switch (subitem)
+    {
+    case COL_ITEMPERM_NAME:    return signum(_wcsicmp(m_snapshot->path.c_str(), otherItem->m_snapshot->path.c_str()));
+    case COL_ITEMPERM_ACCOUNT: return signum(_wcsicmp(m_account.c_str(), otherItem->m_account.c_str()));
+    case COL_ITEMPERM_TYPE:    return usignum(m_deny, otherItem->m_deny);
+    case COL_ITEMPERM_RIGHTS:  return m_level != otherItem->m_level ?
+        usignum(m_level, otherItem->m_level) : usignum(m_mask, otherItem->m_mask);
+    case COL_ITEMPERM_APPLIESTO: return signum(_wcsicmp(GetAppliesText().c_str(), otherItem->GetAppliesText().c_str()));
+    case COL_ITEMPERM_INHERITANCE: return usignum(m_inheritanceDisabled, otherItem->m_inheritanceDisabled);
+    default:                   return 0;
+    }
+}
+
+CItem* CItemPerm::GetLinkedItem() noexcept
+{
+    const auto* model = CWinDirStatModel::Get();
+    if (model == nullptr || !model->IsScanSettled()) return nullptr;
+
+    // Keep permission rows as snapshots, but resolve actions to the current scan tree.
+    return model->GetRootItem()->FindItemByPath(m_snapshot->path);
+}
+
+HICON CItemPerm::GetIcon()
+{
+    auto* viewState = GetViewState();
+
+    // No icon to return if not visible yet
+    if (viewState == nullptr) return nullptr;
+
+    if (viewState->icon != nullptr) return viewState->icon;
+
+    // Fetch all icons
+    CDirStatApp::Get()->GetIconHandler()->DoAsyncShellInfoLookup(std::make_tuple(this,
+        viewState->control, m_snapshot->path, m_snapshot->attributes, &viewState->icon, nullptr));
+    return nullptr;
+}
+
+COLORREF CItemPerm::GetItemTextColor() const
+{
+    // Recompute the rule color only when the configured rules have changed
+    if (m_colorVersion != GetRuleVersion())
+    {
+        m_colorVersion = GetRuleVersion();
+        m_color = GetRuleColor(m_account, m_mask);
+    }
+    return m_color != CLR_NONE ? m_color : CTreeListItem::GetItemTextColor();
+}
+
+PERMSLEVEL CItemPerm::ComputeRightsLevel(const ACCESS_MASK mask)
+{
+    for (const auto [level, levelMask] : std::views::enumerate(std::span(levelMasks).first(PERMSLEVEL_SPECIAL)))
+    {
+        if ((mask & levelMask) == levelMask) return static_cast<PERMSLEVEL>(level);
+    }
+    return PERMSLEVEL_SPECIAL;
+}
+
+bool CItemPerm::LevelSatisfied(const ACCESS_MASK mask, const PERMSLEVEL level)
+{
+    if (level == PERMSLEVEL_SPECIAL) return ComputeRightsLevel(mask) == PERMSLEVEL_SPECIAL;
+    return (mask & levelMasks[level]) == levelMasks[level];
+}
+
+std::wstring CItemPerm::GetRightsLevelName(const PERMSLEVEL level)
+{
+    static auto names = SplitString(Localization::Lookup(IDS_PERMS_LEVELS), L',');
+    const auto index = std::to_underlying(level);
+    return index < names.size() ? names[index] : std::wstring{};
+}
+
+std::wstring CItemPerm::GetAccessTypeName(const bool deny)
+{
+    static auto names = SplitString(Localization::Lookup(IDS_PERMS_TYPES), L',');
+    const size_t index = deny ? 1 : 0;
+    return index < names.size() ? names[index] : std::wstring{};
+}
+
+PERMSAPPLIES CItemPerm::ComputeApplies(const BYTE aceFlags, const bool isContainer)
+{
+    // Inheritance flags only have meaning on containers; files apply to themselves only
+    if (!isContainer) return PERMSAPPLIES_THIS;
+    const bool oi = (aceFlags & OBJECT_INHERIT_ACE) != 0;
+    const bool ci = (aceFlags & CONTAINER_INHERIT_ACE) != 0;
+    const bool io = (aceFlags & INHERIT_ONLY_ACE) != 0;
+
+    // Map the OI/CI/IO combination to the standard "Applies to" classification
+    if (oi && ci) return io ? PERMSAPPLIES_SUB_FILES : PERMSAPPLIES_THIS_SUB_FILES;
+    if (ci)       return io ? PERMSAPPLIES_SUB : PERMSAPPLIES_THIS_SUB;
+    if (oi)       return io ? PERMSAPPLIES_FILES : PERMSAPPLIES_THIS_FILES;
+    return PERMSAPPLIES_THIS;
+}
+
+std::wstring CItemPerm::GetAppliesName(const PERMSAPPLIES applies, const bool isContainer)
+{
+    // Files have no inheritance scope so they use a dedicated single label
+    if (!isContainer) return Localization::Lookup(IDS_PERMS_APPLIES_FILE);
+    static auto names = SplitString(Localization::Lookup(IDS_PERMS_APPLIES), L'|');
+    const auto index = std::to_underlying(applies);
+    return index < names.size() ? names[index] : std::wstring{};
+}
+
+std::wstring CItemPerm::GetInheritedName(const bool disabled)
+{
+    // Reuse the shared yes/no strings, but strip button mnemonics before showing them in the grid/export.
+    static const std::wstring yes = GetLocalizedMenuText(IDS_GENERIC_YES);
+    static const std::wstring no  = GetLocalizedMenuText(IDS_GENERIC_NO);
+    return disabled ? no : yes;
+}
+
+COLORREF CItemPerm::GetRuleColor(const std::wstring& account, const ACCESS_MASK mask)
+{
+    // Account patterns are case-insensitive regular expressions; compile them once per change
+    struct Rule { std::wregex account; int level; COLORREF color; };
+    static std::vector<Rule> rules;
+    static int cachedVersion = -1;
+    if (cachedVersion != m_ruleVersion.load())
+    {
+        cachedVersion = m_ruleVersion.load();
+        rules.clear();
+        for (const auto [accountOpt, levelOpt, colorOpt] :
+            std::views::zip(COptions::PermsColorAccount, COptions::PermsColorLevel, COptions::PermsColor))
+        {
+            const std::wstring& pattern = accountOpt.Obj();
+            if (pattern.empty()) continue;
+            try { rules.emplace_back(std::wregex(pattern, std::regex::icase | std::regex::optimize),
+                levelOpt, colorOpt); }
+            catch (const std::regex_error&) {}
+        }
+    }
+
+    // Return the color of the first matching rule
+    for (const auto& [accountrule, level, color] : rules)
+    {
+        if (!std::regex_search(account, accountrule)) continue;
+        if (level == 0 || LevelSatisfied(mask, static_cast<PERMSLEVEL>(level - 1))) return color;
+    }
+    return CLR_NONE;
+}

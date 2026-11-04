@@ -1,0 +1,781 @@
+﻿// WinDirStat - Windows Directory Statistics
+// Copyright © WinDirStat Team
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Distributed WITHOUT ANY WARRANTY; see LICENSE.md for details.
+
+#include "pch.h"
+#include "HelpersInterface.h"
+#include "Item.h"
+#include "FinderMtp.h"
+#include "StorageSource.h"
+#include "Options.h"
+#include "Localization.h"
+#include "Version.h"
+
+#pragma comment(lib, "cabinet.lib")
+
+static std::wstring FormatLongLongNormal(ULONGLONG n)
+{
+    if (n == 0) return L"0";
+
+    const wchar_t sep = GetLocaleThousandSeparator();
+    std::array<WCHAR, 32> buffer;
+    size_t pos = buffer.size() - 1;
+    buffer[pos] = L'\0';
+
+    for (int count = 0; n > 0; ++count, n /= 10)
+    {
+        if (count && count % 3 == 0) buffer[--pos] = sep;
+        buffer[--pos] = L'0' + n % 10;
+    }
+
+    return { buffer.begin() + pos, buffer.end() - 1 };
+}
+
+std::wstring GetLocaleString(const LCTYPE lctype, const LCID lcid)
+{
+    wchar_t name[LOCALE_NAME_MAX_LENGTH]{};
+    if (LCIDToLocaleName(lcid, name, LOCALE_NAME_MAX_LENGTH, LOCALE_ALLOW_NEUTRAL_NAMES) == 0) return {};
+
+    return GetLocaleString(lctype, name);
+}
+
+std::wstring GetLocaleString(const LCTYPE lctype, const std::wstring& localeName)
+{
+    if (localeName.empty()) return {};
+
+    const int len = GetLocaleInfoEx(localeName.c_str(), lctype, nullptr, 0);
+    if (len <= 0) return {};
+
+    std::wstring s(len - 1, L'\0');
+    GetLocaleInfoEx(localeName.c_str(), lctype, s.data(), len);
+    return s;
+}
+
+std::wstring GetLocaleLanguage(const LANGID langid)
+{
+    // Check if this is a neutral language (no specific region)
+    if (SUBLANGID(langid) == SUBLANG_NEUTRAL)
+    {
+        // Use just the language name without the full display name
+        const std::wstring s = GetLocaleString(LOCALE_SENGLISHLANGUAGENAME, langid);
+        const std::wstring n = GetLocaleString(LOCALE_SNATIVELANGUAGENAME, langid);
+        return s + L" - " + n;
+    }
+
+    const std::wstring s = GetLocaleString(LOCALE_SENGLISHDISPLAYNAME, langid);
+    const std::wstring n = GetLocaleString(LOCALE_SNATIVEDISPLAYNAME, langid);
+    return s + L" - " + n;
+}
+
+wchar_t GetLocaleThousandSeparator() noexcept
+{
+    static LCID cachedLocale = static_cast<LCID>(-1);
+    static wchar_t cachedChar;
+    if (cachedLocale != COptions::GetLocaleForFormatting())
+    {
+        cachedLocale = COptions::GetLocaleForFormatting();
+        cachedChar = GetLocaleString(LOCALE_STHOUSAND, cachedLocale)[0];
+    }
+    return cachedChar;
+}
+
+wchar_t GetLocaleDecimalSeparator() noexcept
+{
+    static LCID cachedLocale = static_cast<LCID>(-1);
+    static wchar_t cachedChar;
+    if (cachedLocale != COptions::GetLocaleForFormatting())
+    {
+        cachedLocale = COptions::GetLocaleForFormatting();
+        cachedChar = GetLocaleString(LOCALE_SDECIMAL, cachedLocale)[0];
+    }
+    return cachedChar;
+}
+
+std::wstring FormatBytes(const ULONGLONG n) noexcept
+{
+    if (COptions::UseSizeSuffixes)
+    {
+        return FormatSizeSuffixes(n);
+    }
+
+    return FormatLongLongNormal(n) + L" " + GetSpec_Bytes();
+}
+
+std::wstring FormatSizeSuffixes(const ULONGLONG n) noexcept
+{
+    using namespace wds;
+    static constexpr struct {
+        ULONGLONG bytes;
+        ULONGLONG threshold;
+        const std::wstring& (*suffix)();
+    } units[] = {
+        {Ti, Ti - Gi / 2, GetSpec_TiB},
+        {Gi, Gi - Mi / 2, GetSpec_GiB},
+        {Mi, Mi - Ki / 2, GetSpec_MiB},
+        {Ki, Ki,          GetSpec_KiB},
+    };
+
+    for (const auto& [bytes, threshold, suffix] : units) [[msvc::flatten]]
+    {
+        if (n < threshold) continue;
+
+        return FormatDouble(static_cast<double>(n)
+            / static_cast<double>(bytes)) + L" " + suffix();
+    }
+    return std::to_wstring(n) + L" " + GetSpec_Bytes();
+}
+
+std::wstring FormatCount(const ULONGLONG n) noexcept
+{
+    return FormatLongLongNormal(n);
+}
+
+std::wstring FormatDouble(const double d) noexcept
+{
+    assert(d >= 0);
+    const int x = std::lround(d * 100);
+    const int i = x / 100;
+    const int r = x % 100;
+
+    return std::to_wstring(i) + GetLocaleDecimalSeparator() +
+        std::wstring({ static_cast<wchar_t>(L'0' + r / 10), static_cast<wchar_t>(L'0' + r % 10) });
+}
+
+std::wstring FormatFileTime(const FILETIME& t, const bool seconds) noexcept
+{
+    SYSTEMTIME st;
+    FILETIME ft;
+    if (FileTimeToLocalFileTime(&t, &ft) == 0 || FileTimeToSystemTime(&ft, &st) == 0)
+    {
+        return {};
+    }
+
+    const LCID lcid = COptions::GetLocaleForFormatting();
+
+    std::array<WCHAR, 64> date;
+    GetDateFormat(lcid, DATE_SHORTDATE, &st, nullptr, date.data(), std::ssize(date));
+
+    const bool showSeconds = seconds || COptions::ShowTimeSeconds;
+    const DWORD timeFlags = showSeconds ? 0 : TIME_NOSECONDS;
+    std::wstring timeFormat;
+    if (showSeconds)
+    {
+        timeFormat = GetLocaleString(LOCALE_STIMEFORMAT, lcid);
+        bool quoted = false, hasSeconds = false;
+        size_t minuteEnd = std::wstring::npos;
+        for (const auto [i, c] : std::views::enumerate(timeFormat))
+        {
+            if (c == L'\'') quoted = !quoted;
+            if (quoted) continue;
+            if (c == L'm') minuteEnd = i + 1;
+            if (c == L's') hasSeconds = true;
+        }
+
+        // Custom Windows time formats can omit seconds even without TIME_NOSECONDS.
+        if (!hasSeconds)
+        {
+            if (minuteEnd == std::wstring::npos)
+                timeFormat = GetLocaleString(LOCALE_STIMEFORMAT | LOCALE_NOUSEROVERRIDE, lcid);
+            else
+            {
+                std::wstring separator = GetLocaleString(LOCALE_STIME, lcid);
+                for (size_t i = 0; (i = separator.find(L'\'', i)) != std::wstring::npos; i += 2)
+                    separator.insert(i, 1, L'\'');
+                timeFormat.insert(minuteEnd, L"'" + separator + L"'ss");
+            }
+        }
+    }
+    const wchar_t* format = timeFormat.empty() ? nullptr : timeFormat.c_str();
+    std::wstring time(GetTimeFormat(lcid, timeFlags, &st, format, nullptr, 0), L'\0');
+    if (time.empty() || GetTimeFormat(lcid, timeFlags, &st, format, time.data(), static_cast<int>(time.size())) == 0)
+    {
+        return {};
+    }
+    time.pop_back();
+
+    return std::wstring(date.data()) + L"  " + time;
+}
+
+std::wstring FormatAttributes(const DWORD attr) noexcept
+{
+    if (attr == INVALID_FILE_ATTRIBUTES) return wds::strInvalidAttributes;
+
+    std::wstring attributes;
+    if (attr & FILE_ATTRIBUTE_READONLY) attributes += wds::chrAttributeReadonly;
+    if (attr & FILE_ATTRIBUTE_HIDDEN) attributes += wds::chrAttributeHidden;
+    if (attr & FILE_ATTRIBUTE_SYSTEM) attributes += wds::chrAttributeSystem;
+    if (attr & FILE_ATTRIBUTE_ARCHIVE) attributes += wds::chrAttributeArchive;
+    if (attr & FILE_ATTRIBUTE_COMPRESSED) attributes += wds::chrAttributeCompressed;
+    if (attr & FILE_ATTRIBUTE_ENCRYPTED) attributes += wds::chrAttributeEncrypted;
+    if (attr & FILE_ATTRIBUTE_OFFLINE) attributes += wds::chrAttributeOffline;
+    if (attr & FILE_ATTRIBUTE_SPARSE_FILE) attributes += wds::chrAttributeSparse;
+
+    return attributes;
+}
+
+std::wstring FormatHex(const std::vector<BYTE> & bytes, const bool upper) noexcept
+{
+    if (bytes.empty()) return {};
+
+    const wchar_t* h = upper
+        ? L"0123456789ABCDEF"
+        : L"0123456789abcdef";
+
+    std::wstring out;
+    out.resize_and_overwrite(bytes.size() * 2, [&](wchar_t* buffer, const size_t size) noexcept {
+        for (const auto [i, b] : std::views::enumerate(bytes))
+        {
+            buffer[2 * i] = h[b >> 4];
+            buffer[2 * i + 1] = h[b & 0x0F];
+        }
+        return size;
+    });
+    return out;
+}
+
+std::wstring FormatMilliseconds(const ULONGLONG ms) noexcept
+{
+    const ULONGLONG sec = (ms + 500) / 1000;
+    const ULONGLONG s = sec % 60;
+    const ULONGLONG min = sec / 60;
+    const ULONGLONG m = min % 60;
+    const ULONGLONG h = min / 60;
+
+    return (h == 0) ? std::format(L"{}:{:02}", m, s) : std::format(L"{}:{:02}:{:02}", h, m, s);
+}
+
+std::wstring FormatVolumeNameOfRootPath(const std::wstring& rootPath)
+{
+    const std::wstring volumeName = GetVolumeName(rootPath);
+    return volumeName.empty() ? rootPath : FormatVolumeName(rootPath, volumeName);
+}
+
+std::wstring FormatVolumeName(const std::wstring& rootPath, const std::wstring& volumeName)
+{
+    return std::format(L"{} ({:.2})", volumeName, rootPath);
+}
+
+// File and path helpers
+std::wstring GetFolderNameFromPath(const std::wstring_view path)
+{
+    return std::filesystem::path(path).parent_path().wstring();
+}
+
+std::wstring GetBaseNameFromPath(const std::wstring_view path)
+{
+    return std::filesystem::path(path).filename().wstring();
+}
+
+std::wstring GlobToRegex(const std::wstring& glob, const bool useAnchors)
+{
+    static const std::wregex escapePattern(LR"([.\\+^$|()[\]{}])", std::regex_constants::optimize);
+    static const std::wregex starPattern(LR"(\*+)", std::regex_constants::optimize);
+    static const std::wregex questionPattern(LR"(\?)", std::regex_constants::optimize);
+
+    std::wstring regex = glob;
+    regex = std::regex_replace(regex, escapePattern, LR"(\$&)");
+    regex = std::regex_replace(regex, starPattern, LR"([^\\/:]*)");
+    regex = std::regex_replace(regex, questionPattern, LR"([^\\/:])");
+
+    return useAnchors ? (L"^" + regex + L"$") : regex;
+}
+
+// String helpers
+void ReplaceString(std::wstring& subject, const std::wstring_view search, const std::wstring_view replace)
+{
+    if (search.empty()) return;
+
+    for (size_t i = 0; (i = subject.find(search, i)) != std::wstring::npos; i += replace.length())
+    {
+        subject.replace(i, search.length(), replace);
+    }
+}
+
+std::wstring& TrimString(std::wstring& s, const wchar_t c, const bool endOnly) noexcept
+{
+    s.erase(s.find_last_not_of(c) + 1);
+    if (!endOnly && !s.empty()) s.erase(0, s.find_first_not_of(c));
+    return s;
+}
+
+std::wstring MakeLower(const std::wstring& s)
+{
+    std::wstring lower = s;
+    _wcslwr_s(lower.data(), lower.size() + 1);
+    return lower;
+}
+
+std::wstring JoinString(const std::vector<std::wstring>& items, const WCHAR delim)
+{
+    if (items.empty()) return {};
+    size_t len = 0;
+    for (const auto& item : items) len += item.size() + 1;
+    std::wstring result;
+    result.reserve(len);
+    for (const auto& item : items)
+    {
+        if (!result.empty()) result += delim;
+        result += item;
+    }
+    return result;
+}
+
+std::vector<std::wstring> SplitString(const std::wstring& string, const WCHAR delim)
+{
+    std::vector<std::wstring> selections;
+    for (const auto part : std::views::split(string, delim))
+    {
+        selections.emplace_back(std::from_range, part);
+        TrimString(selections.back());
+    }
+    return selections;
+}
+
+std::vector<std::wstring> NormalizeScanPaths(const std::wstring& pathSpec)
+{
+    std::vector<std::pair<std::wstring, std::wstring>> roots;
+    std::vector<RemoteTarget> remote;
+    for (auto& path : SplitString(pathSpec))
+    {
+        if (path.empty()) continue;
+        if (StorageSource::IsPath(path))
+        {
+            // Compare remote prefixes on the same connection, respecting WebDAV directory boundaries.
+            auto target = StorageSource::Parse(path);
+            if (!target) continue;
+            target->EndCollection();
+            if (std::ranges::any_of(remote, [&](const auto& other)
+            {
+                return target->SameConnection(other) && target->prefix.starts_with(other.prefix);
+            })) continue;
+            std::erase_if(remote, [&](const auto& other)
+            {
+                return target->SameConnection(other) && other.prefix.starts_with(target->prefix);
+            });
+            remote.push_back(*target);
+            continue;
+        }
+        const bool isMtp = FinderMtp::IsPath(path);
+        if (!isMtp)
+        {
+            if (path.back() == L':') path += L'\\';
+            const SmartPointer fullPath(free, _wfullpath(nullptr, path.c_str(), 0));
+            if (fullPath != nullptr) path = fullPath.Get();
+        }
+
+        // Compare complete components, treating ordinary and extended paths alike.
+        std::wstring key = MakeLower(isMtp ? path : Finder::MakeLongPathCompatible(path));
+        while (key.ends_with(L'\\')) key.pop_back();
+        key += L'\\';
+        if (std::ranges::any_of(roots, [&key](const auto& root) { return key.starts_with(root.second); })) continue;
+        std::erase_if(roots, [&key](const auto& root) { return root.second.starts_with(key); });
+        roots.emplace_back(std::move(path), std::move(key));
+    }
+
+    std::vector<std::wstring> paths;
+    paths.reserve(roots.size());
+    for (auto& [path, key] : roots) paths.emplace_back(std::move(path));
+    for (const auto& target : remote) paths.push_back(target.ToString());
+    return paths;
+}
+
+// Attribute parsing
+DWORD ParseAttributes(const std::wstring_view& attributes) noexcept
+{
+    if (attributes == wds::strInvalidAttributes) return INVALID_FILE_ATTRIBUTES;
+
+    DWORD attr = 0;
+    for (const WCHAR ch : attributes)
+    {
+        if (ch == wds::chrAttributeReadonly) attr |= FILE_ATTRIBUTE_READONLY;
+        else if (ch == wds::chrAttributeHidden) attr |= FILE_ATTRIBUTE_HIDDEN;
+        else if (ch == wds::chrAttributeSystem) attr |= FILE_ATTRIBUTE_SYSTEM;
+        else if (ch == wds::chrAttributeArchive) attr |= FILE_ATTRIBUTE_ARCHIVE;
+        else if (ch == wds::chrAttributeCompressed) attr |= FILE_ATTRIBUTE_COMPRESSED;
+        else if (ch == wds::chrAttributeEncrypted) attr |= FILE_ATTRIBUTE_ENCRYPTED;
+        else if (ch == wds::chrAttributeOffline) attr |= FILE_ATTRIBUTE_OFFLINE;
+        else if (ch == wds::chrAttributeSparse) attr |= FILE_ATTRIBUTE_SPARSE_FILE;
+    }
+
+    return attr;
+}
+
+// Size specifiers
+const std::wstring& GetSpec_Bytes() noexcept
+{
+    static std::wstring s = Localization::Lookup(IDS_SPEC_BYTES);
+    return s;
+}
+
+const std::wstring& GetSpec_KiB() noexcept
+{
+    static std::wstring s = Localization::Lookup(IDS_SPEC_KiB);
+    return s;
+}
+
+const std::wstring& GetSpec_MiB() noexcept
+{
+    static std::wstring s = Localization::Lookup(IDS_SPEC_MiB);
+    return s;
+}
+
+const std::wstring& GetSpec_GiB() noexcept
+{
+    static std::wstring s = Localization::Lookup(IDS_SPEC_GiB);
+    return s;
+}
+
+const std::wstring& GetSpec_TiB() noexcept
+{
+    static std::wstring s = Localization::Lookup(IDS_SPEC_TiB);
+    return s;
+}
+
+// System information
+FILETIME CurrentSystemFileTime() noexcept
+{
+    FILETIME result;
+    GetSystemTimeAsFileTime(&result); // Windows 7 compatible
+    return result;
+}
+
+std::wstring GetCOMSPEC()
+{
+    std::array<WCHAR, MAX_PATH> cmd;
+    if (::GetEnvironmentVariable(L"COMSPEC", cmd.data(), std::ssize(cmd)) == 0)
+    {
+        VTRACE(L"COMSPEC not set.");
+        return L"cmd.exe";
+    }
+
+    return cmd.data();
+}
+
+const std::wstring& GetSysDirectory() noexcept
+{
+    static std::wstring s;
+    if (!s.empty()) return s;
+    s.resize(MAX_PATH), ::GetSystemDirectory(s.data(), MAX_PATH);
+    s.resize(wcslen(s.data()));
+    return s;
+}
+
+// UI helpers
+void DisplayError(const std::wstring& error)
+{
+    ShowMessageBox(error, MB_OK | MB_ICONERROR);
+}
+
+std::wstring TranslateError(const HRESULT hr)
+{
+    SmartPointer lpMsgBuf(LocalFree, static_cast<LPVOID>(nullptr));
+    if (FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+        nullptr, hr, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+        reinterpret_cast<LPWSTR>(&lpMsgBuf), 0, nullptr) == 0)
+    {
+        return std::format(L"Windows error {:#08x}", static_cast<DWORD>(hr));
+
+    }
+    return static_cast<LPWSTR>(*lpMsgBuf);
+}
+
+bool ShellExecuteWrapper(const std::wstring& lpFile, const std::wstring& lpParameters, const std::wstring& lpVerb,
+    const HWND hwnd, const std::wstring& lpDirectory, const INT nShowCmd, const ULONG fMask, HANDLE* process)
+{
+    CWaitCursor wc;
+
+    SHELLEXECUTEINFO sei = {
+        .cbSize = sizeof(SHELLEXECUTEINFO),
+        .fMask = fMask | (process != nullptr ? SEE_MASK_NOCLOSEPROCESS : 0),
+        .hwnd = hwnd,
+        .lpVerb = lpVerb.empty() ? nullptr : lpVerb.c_str(),
+        .lpFile = lpFile.empty() ? nullptr : lpFile.c_str(),
+        .lpParameters = lpParameters.empty() ? nullptr : lpParameters.c_str(),
+        .lpDirectory = lpDirectory.empty() ? nullptr : lpDirectory.c_str(),
+        .nShow = nShowCmd
+    };
+
+    const bool bResult = ::ShellExecuteEx(&sei);
+    if (process != nullptr) *process = sei.hProcess;
+    if (!bResult && GetLastError() != ERROR_CANCELLED)
+    {
+        DisplayError(L"ShellExecute failed: " + TranslateError(GetLastError()));
+    }
+    return bResult;
+}
+
+bool ExecuteCommandInConsole(const std::wstring& command, const std::wstring& title)
+{
+    const std::wstring cmd = GetSysDirectory() + L"\\CMD.EXE";
+    const std::wstring cmdline = std::format(LR"(/C "TITLE {} - {} & {} & PAUSE")",
+        wds::strWinDirStat, title, command);
+
+    return ShellExecuteWrapper(cmd, cmdline, L"runas");
+}
+
+std::wstring GetLocalizedMenuText(const std::wstring_view textId, const std::wstring_view detail)
+{
+    static const std::wregex decorations(LR"(\s*\(&.\)(?:\t.*)?$|\t.*$|&(&?))",
+        std::regex_constants::optimize);
+    std::wstring text = std::regex_replace(Localization::Lookup(textId), decorations, L"$1");
+    return detail.empty() ? text : std::format(L"{} ({})", text, detail);
+}
+
+// Shell item array
+PIDLIST_ABSOLUTE CreateShellPidl(const std::wstring& path)
+{
+    // Strip the app's MTP marker so the shell can parse the underlying namespace path
+    const std::wstring shellPath = FinderMtp::IsPath(path) ? FinderMtp::StripPrefix(path) : path;
+    PIDLIST_ABSOLUTE pidl = nullptr;
+    if (FAILED(SHParseDisplayName(shellPath.c_str(), nullptr, &pidl, 0, nullptr))) return nullptr;
+    return pidl;
+}
+
+PIDLIST_ABSOLUTE CreateShellPidl(const CItem* item)
+{
+    if (item == nullptr || item->IsTypeOrFlag(ITF_REMOTE)) return nullptr;
+    if (!item->IsTypeOrFlag(ITF_MTP)) return CreateShellPidl(item->GetPath());
+
+    // Prefer the registered MTP PIDL, then rebuild one from the stored shell path
+    if (PIDLIST_ABSOLUTE pidl = FinderMtp::CloneShellPidl(item->GetIndex()); pidl != nullptr) return pidl;
+    const std::wstring shellPath = FinderMtp::GetShellPath(item->GetIndex());
+    return shellPath.empty() ? nullptr : CreateShellPidl(shellPath);
+}
+
+CComPtr<IShellItemArray> CreateShellItemArray(const std::vector<CItem*>& items, const bool allOrNothing)
+{
+    // Keep resolved PIDLs alive while collecting the raw pointers required by the shell
+    std::vector<SmartPointer<LPITEMIDLIST, decltype(&CoTaskMemFree)>> pidlHolders;
+    std::vector<LPCITEMIDLIST> pidls;
+    pidlHolders.reserve(items.size());
+    pidls.reserve(items.size());
+
+    // Resolve each application item and optionally fail rather than return a partial selection
+    for (const auto& item : items)
+    {
+        PIDLIST_ABSOLUTE pidl = nullptr;
+        if (item->IsTypeOrFlag(IT_MYCOMPUTER))
+            SHGetKnownFolderIDList(FOLDERID_ComputerFolder, 0, nullptr, &pidl);
+        else
+            pidl = CreateShellPidl(item);
+        if (!pidl)
+        {
+            if (allOrNothing) return {};
+            continue;
+        }
+        pidlHolders.emplace_back(CoTaskMemFree, pidl);
+        pidls.push_back(pidl);
+    }
+
+    // Aggregate the resolved PIDLs into a shell item array
+    CComPtr<IShellItemArray> psia;
+    if (!pidls.empty())
+        SHCreateShellItemArrayFromIDLists(static_cast<UINT>(pidls.size()), pidls.data(), &psia);
+    return psia;
+}
+
+// Context menu
+CComPtr<IContextMenu> GetContextMenu(const std::vector<CItem*>& items)
+{
+    // Require a complete shell selection before requesting its context-menu handler
+    const CComPtr<IShellItemArray> shellItems = CreateShellItemArray(items, true);
+    if (shellItems == nullptr) return {};
+
+    CComPtr<IContextMenu> contextMenu;
+    if (FAILED(shellItems->BindToHandler(nullptr, BHID_SFUIObject, IID_PPV_ARGS(&contextMenu)))) return {};
+    return contextMenu;
+}
+
+// Application info
+std::wstring GetAppTitle()
+{
+    auto formatTag = [](const bool condition, const std::wstring_view text) -> std::wstring {
+        return condition ? std::format(L" {}", text) : L"";
+    };
+
+    return std::format(L"{}{}{} {}.{}.{}", Localization::LookupNeutral(IDS_APP_TITLE),
+        formatTag(CDirStatApp::InPortableMode(), Localization::Lookup(IDS_PORTABLE)),
+        formatTag(PRODUCTION == 0, L"Beta"), PRD_MAJVER, PRD_MINVER, PRD_PATCH);
+}
+
+std::wstring GetAppFileName(const std::wstring& ext)
+{
+    std::wstring s(MAX_PATH, wds::chrNull);
+    ::GetModuleFileName(nullptr, s.data(), MAX_PATH);
+    s.resize(wcslen(s.data()));
+
+    // optional substitute extension
+    if (!ext.empty())
+    {
+        return std::filesystem::path(s).replace_extension(ext);
+    }
+
+    return s;
+}
+
+std::wstring GetAppFolder()
+{
+    return std::filesystem::path(GetAppFileName()).parent_path().wstring();
+}
+
+// Resources
+std::wstring GetTextResource(const UINT id)
+{
+    // Locate the LZX cabinet embedded as a text resource
+    const HRSRC resource = ::FindResource(nullptr, MAKEINTRESOURCE(id), L"TEXT");
+    const auto data = resource != nullptr ?
+        static_cast<const BYTE*>(LockResource(LoadResource(nullptr, resource))) : nullptr;
+    if (data == nullptr) return {};
+
+    // FDI callbacks take no context and FDI opens the cabinet more than once, so
+    // per-thread state holds the cabinet, a read position per handle, and the output
+    thread_local std::span<const BYTE> cabinet;
+    thread_local std::vector<size_t> positions;
+    thread_local std::string output;
+    cabinet = { data, SizeofResource(nullptr, resource) };
+    positions.clear();
+    output.clear();
+
+    // Decompress the single file in the cabinet into the output buffer
+    ERF erf{};
+    const SmartPointer hfdi(FDIDestroy, FDICreate(
+        +[](const ULONG cb) -> void* { return malloc(cb); },
+        +[](void* pv) { free(pv); },
+        +[](char*, int, int) -> INT_PTR { positions.push_back(0); return static_cast<INT_PTR>(positions.size()); },
+        +[](const INT_PTR hf, void* pv, const UINT cb) -> UINT {
+            size_t& pos = positions[hf - 1];
+            const size_t read = std::min<size_t>(cb, cabinet.size() - pos);
+            memcpy(pv, cabinet.data() + pos, read);
+            pos += read;
+            return static_cast<UINT>(read);
+        },
+        +[](INT_PTR, void* pv, const UINT cb) -> UINT { output.append(static_cast<const char*>(pv), cb); return cb; },
+        +[](INT_PTR) { return 0; },
+        +[](const INT_PTR hf, const long dist, const int seektype) -> long {
+            size_t& pos = positions[hf - 1];
+            pos = (seektype == SEEK_SET ? 0 : seektype == SEEK_CUR ? pos : cabinet.size()) + dist;
+            return static_cast<long>(pos);
+        },
+        cpu80386, &erf));
+    if (!hfdi || !FDICopy(hfdi, std::string().data(), std::string().data(), 0,
+        +[](const FDINOTIFICATIONTYPE fdint, PFDINOTIFICATION) -> INT_PTR {
+            return fdint == fdintCOPY_FILE || fdint == fdintCLOSE_FILE_INFO;
+        }, nullptr, nullptr)) return {};
+
+    return Localization::ConvertToWideString(std::exchange(output, {}));
+}
+
+std::wstring GetAcceleratorString(const UINT commandID)
+{
+    static std::vector<std::pair<UINT, std::wstring>> cache;
+
+    // Populate the cache on first use
+    if (cache.empty())
+    {
+        // Define mappings for modifier keys and special keys to their string representations
+        static constexpr struct { UINT key; std::wstring_view name; }
+        Modifiers[] = {
+            { FCONTROL,      L"Ctrl"  }, { FALT,        L"Alt"   }, { FSHIFT,      L"Shift" } },
+        SpecialKeys[] = {
+            // Directional Keys
+            { VK_UP,         L"↑"     }, { VK_DOWN,     L"↓"     }, { VK_LEFT,     L"←"     }, { VK_RIGHT,     L"→"     },
+            // Numpad Keys
+            { VK_ADD,        L"Num +" }, { VK_SUBTRACT, L"Num -" }, { VK_MULTIPLY, L"Num *" }, { VK_DIVIDE,    L"Num /" },
+            { VK_DECIMAL,    L"Num ." },
+            // Other Special Keys
+            { VK_INSERT,     L"Ins"   }, { VK_DELETE,   L"Del"   }, { VK_HOME,     L"Home"  }, { VK_END,       L"End"   },
+            { VK_PRIOR,      L"PgUp"  }, { VK_NEXT,     L"PgDn"  }, { VK_OEM_PLUS, L"+"     }, { VK_OEM_MINUS, L"-"     },
+            { VK_OEM_PERIOD, L"."     }, { VK_TAB,      L"Tab"   }, { VK_RETURN,   L"Enter" }, { VK_SPACE,     L"Space" }
+        };
+
+        // Load all accelerator objects and get count
+        const HACCEL hAccel = LoadAccelerators(GetAppInstance(), MAKEINTRESOURCE(IDR_MAINFRAME));
+        const int count = CopyAcceleratorTable(hAccel, nullptr, 0);
+        if (count == 0) return wds::strEmpty;
+
+        // Read all from the table
+        std::vector<ACCEL> accels(count);
+        CopyAcceleratorTable(hAccel, accels.data(), count);
+
+        // Sort the accelerators to ensure numpad keys are always at the end of the shortcut key hint to improve
+        // its readability and visual consistency, disregarding line order in the accelerator table
+        std::ranges::sort(accels, [](const ACCEL& firstAccel, const ACCEL& secondAccel) {
+            if (firstAccel.cmd != secondAccel.cmd) return firstAccel.cmd < secondAccel.cmd;
+            auto isNumpadKey = [](const ACCEL& entry) { return (entry.key >= VK_MULTIPLY && entry.key <= VK_DIVIDE); };
+            return !isNumpadKey(firstAccel) && isNumpadKey(secondAccel);
+        });
+
+        // Compute strings for all the commands in the table
+        for (const auto& [virtKey, key, cmd] : accels)
+        {
+            auto cacheEntry = std::ranges::find(cache, cmd, &std::pair<UINT, std::wstring>::first);
+            if (cacheEntry == cache.end())
+            {
+                cache.emplace_back(cmd, wds::strEmpty);
+                cacheEntry = std::prev(cache.end());
+            }
+            auto& result = cacheEntry->second;
+
+            if (!result.empty()) result.append(L" / ");
+
+            // Build modifier string
+            for (const auto& [keyMod, name] : Modifiers)
+            {
+                if (virtKey & keyMod) {
+                    result.append(name);
+                    result.push_back(L'+');
+                }
+            }
+
+            // ASCII keys without FVIRTKEY flag
+            if ((virtKey & FVIRTKEY) == 0)
+            {
+                result.push_back(static_cast<WCHAR>(key));
+                continue;
+            }
+
+            // Function keys
+            if (key >= VK_F1 && key <= VK_F24)
+                result.append(std::format(L"F{}", key - VK_F1 + 1));
+
+            // Letter and Number keys
+            else if ((key >= 'A' && key <= 'Z') || (key >= '0' && key <= '9'))
+                result.push_back(static_cast<WCHAR>(key));
+
+            // Special keys
+            else if (const auto it = std::ranges::find_if(SpecialKeys, [key](const auto& mapping)
+                { return mapping.key == key; }); it != std::ranges::end(SpecialKeys))
+                result.append(it->name);
+
+            // Fallback for other keys - show hex code
+            else result.append(std::format(L"VK_{:X}", key));
+        }
+    }
+
+    // Look up the requested command ID in the cache
+    const auto cacheEntry = std::ranges::lower_bound(cache, commandID, {}, &std::pair<UINT, std::wstring>::first);
+    return (cacheEntry != cache.end() && cacheEntry->first == commandID) ? cacheEntry->second : wds::strEmpty;
+}
+
+// Return the deleted text when handled, or nullopt when the message does not remove a history entry.
+std::optional<std::wstring> RemoveSelectedHistoryEntry(const MSG* pMsg, CComboBox& comboBox,
+    std::vector<std::wstring>& history)
+{
+    if (pMsg == nullptr || pMsg->message != WM_KEYDOWN || pMsg->wParam != VK_DELETE ||
+        (pMsg->hwnd != comboBox.m_hWnd && ::GetParent(pMsg->hwnd) != comboBox.m_hWnd) ||
+        !comboBox.GetDroppedState()) return std::nullopt;
+
+    const int selection = comboBox.GetCurSel();
+    if (selection == CB_ERR) return std::nullopt;
+
+    const std::wstring removed = comboBox.GetItemText(selection);
+    const auto entry = std::ranges::find(history, removed);
+    if (entry == history.end() || comboBox.DeleteString(selection) == CB_ERR) return std::nullopt;
+
+    history.erase(entry);
+    const int count = comboBox.GetCount();
+    comboBox.SetCurSel(count > 0 ? std::min(selection, count - 1) : -1);
+    return removed;
+}

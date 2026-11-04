@@ -1,0 +1,188 @@
+﻿// WinDirStat - Windows Directory Statistics
+// Copyright © WinDirStat Team
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Distributed WITHOUT ANY WARRANTY; see LICENSE.md for details.
+
+#include "pch.h"
+#include "Layout.h"
+
+/////////////////////////////////////////////////////////////////////////////
+// CLayoutDialog
+
+void CLayoutDialog::OnSize(UINT /*nType*/, int /*cx*/, int /*cy*/)
+{
+    // Derived dialogs also call this directly to re-run the layout, so it does not forward the current message.
+    m_layout.OnSize();
+}
+
+void CLayoutDialog::OnGetMinMaxInfo(MINMAXINFO* lpMMI)
+{
+    m_layout.OnGetMinMaxInfo(lpMMI);
+    CallDefaultHandler();
+}
+
+void CLayoutDialog::OnDestroy()
+{
+    m_layout.OnDestroy();
+    CallDefaultHandler();
+}
+
+/////////////////////////////////////////////////////////////////////////////
+// CLayout
+
+CLayout::CLayout(CWnd* dialog, RECT* placement)
+    : m_wp(placement), m_dialog(dialog), m_originalDialogSize(0, 0), m_minimumDialogSize(0, 0)
+{
+    assert(dialog != nullptr);
+}
+
+int CLayout::AddControl(CWnd* control, double movex, double movey, double stretchx, double stretchy)
+{
+    m_control.emplace_back(control->Handle(), movex, movey, stretchx, stretchy);
+    return static_cast<int>(m_control.size() - 1);
+}
+
+void CLayout::AddControl(const UINT id, const double movex, const double movey, const double stretchx, const double stretchy)
+{
+    m_control.emplace_back(GetDlgItem(m_dialog->Handle(), id), movex, movey, stretchx, stretchy);
+}
+
+void CLayout::OnInitDialog(const bool centerWindow)
+{
+    m_dialog->SetIcon(LoadIconW(GetAppInstance(), MAKEINTRESOURCEW(IDR_MAINFRAME)), false);
+
+    // Controls keep their positions for the full scaled size, including any part the work area clipped.
+    const auto deficit = static_cast<DWORD>(reinterpret_cast<INT_PTR>(
+        GetPropW(m_dialog->Handle(), DialogSizeDeficitProperty)));
+    m_originalDialogSize = m_dialog->GetWindowRect().Size();
+    m_originalDialogSize.cx += LOWORD(deficit);
+    m_originalDialogSize.cy += HIWORD(deficit);
+
+    for (auto& info : m_control)
+    {
+        info.originalRectangle = m_dialog->GetChildWindowRect(info.control);
+    }
+
+    // Create size gripper
+    CRect sg = m_dialog->GetClientRect();
+    sg.left = sg.right - m_sizeGripper.m_width;
+    sg.top = sg.bottom - m_sizeGripper.m_width;
+    m_sizeGripper.Create(m_dialog, sg);
+
+    const int i = AddControl(&m_sizeGripper, 1, 1, 0, 0);
+    sg.Offset(LOWORD(deficit), HIWORD(deficit));
+    m_control[i].originalRectangle = sg;
+
+    // Fit the full size to the work area, regaining clipped space the dialog's own adjustments freed.
+    const CRect work = GetWorkArea(m_dialog->Handle());
+    m_dialog->SetWindowPos(nullptr, 0, 0, std::min<int>(m_originalDialogSize.cx, work.Width()),
+        std::min<int>(m_originalDialogSize.cy, work.Height()), SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+    m_minimumDialogSize = m_dialog->GetWindowRect().Size();
+    if (m_minimumDialogSize != m_originalDialogSize) OnSize();
+
+    if (m_wp) m_dialog->MoveWindow(*m_wp);
+    if (centerWindow)
+    {
+        m_dialog->CenterWindow();
+    }
+}
+
+void CLayout::OnDestroy() const
+{
+    if (m_wp != nullptr) *m_wp = m_dialog->GetWindowRect();
+}
+
+void CLayout::OnSize()
+{
+    const CRect wrc = m_dialog->GetWindowRect();
+    const CSize diff = wrc.Size() - m_originalDialogSize;
+
+    CPositioner pos(static_cast<int>(m_control.size()));
+
+    for (const auto& [control, movex, movey, stretchx, stretchy, originalRectangle] : m_control)
+    {
+        CRect rc = originalRectangle;
+
+        rc.Offset(static_cast<int>(diff.cx * movex), static_cast<int>(diff.cy * movey));
+        rc.right = std::max(rc.left, rc.right + static_cast<int>(diff.cx * stretchx));
+        rc.bottom = std::max(rc.top, rc.bottom + static_cast<int>(diff.cy * stretchy));
+
+        pos.SetWindowPos(control, rc.left, rc.top, rc.Width(), rc.Height(), SWP_NOOWNERZORDER | SWP_NOZORDER);
+    }
+
+    m_dialog->Invalidate();
+}
+
+void CLayout::OnGetMinMaxInfo(MINMAXINFO* mmi) const
+{
+    // A dialog still arranging itself is not limited by the screen until OnInitDialog fits it to the work area.
+    if (m_minimumDialogSize.cx == 0) mmi->ptMaxTrackSize = { SHRT_MAX, SHRT_MAX };
+    else mmi->ptMinTrackSize = { m_minimumDialogSize.cx, m_minimumDialogSize.cy };
+}
+
+/////////////////////////////////////////////////////////////////////////////
+
+void CLayout::CSizeGripper::Create(CWnd* parent, const CRect rc)
+{
+    CWnd::Create(RegisterWindowClass(0, LoadCursorW(nullptr, IDC_ARROW)),
+        wds::strEmpty, WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS, rc, parent, IDC_SIZEGRIPPER);
+}
+
+void CLayout::CSizeGripper::OnPaint()
+{
+    // Draw three diagonal shadow lines
+    CPaintDC dc(this);
+    DrawThemeParentBackgroundEx(Handle(), dc.Handle(),
+        DTPB_USEERASEBKGND | DTPB_USECTLCOLORSTATIC, nullptr);
+
+    for (int offset : {1, 5, 9})
+    {
+        DrawShadowLine(&dc, { offset, m_width }, { m_width, offset });
+    }
+}
+
+void CLayout::CSizeGripper::DrawShadowLine(CDC* pdc, const CPoint start, const CPoint end)
+{
+    // Draw highlight line
+    {
+        const CPen lightPen(PS_SOLID, 1, DarkMode::SystemColor(COLOR_3DHIGHLIGHT));
+        const GdiObjectSelection sopen(pdc, &lightPen);
+        pdc->MoveTo(start);
+        pdc->LineTo(end);
+    }
+
+    // Draw shadow lines (2 pixels for depth effect)
+    const CPen darkPen(PS_SOLID, 1, DarkMode::SystemColor(COLOR_3DSHADOW));
+    const GdiObjectSelection sopen(pdc, &darkPen);
+
+    for (const int i : std::views::iota(1, 3))
+    {
+        pdc->MoveTo(start.x + i, start.y + i);
+        pdc->LineTo(end.x + i, end.y + i);
+    }
+}
+
+LRESULT CLayout::CSizeGripper::OnNcHitTest(CPoint point) const
+{
+    point = ToClient(point);
+    return (point.x + point.y >= m_width) ? HTBOTTOMRIGHT : 0;
+}
+
+CLayout::CPositioner::CPositioner(const int nNumWindows)
+    : m_wdp(BeginDeferWindowPos(nNumWindows))
+{
+}
+
+CLayout::CPositioner::~CPositioner()
+{
+    if (m_wdp != nullptr)
+    {
+        EndDeferWindowPos(m_wdp);
+    }
+}
+
+void CLayout::CPositioner::SetWindowPos(const HWND hWnd, const int x, const int y, const int cx, const int cy, const UINT uFlags)
+{
+    m_wdp = DeferWindowPos(m_wdp, hWnd, nullptr, x, y, cx, cy, uFlags | SWP_NOZORDER);
+}
