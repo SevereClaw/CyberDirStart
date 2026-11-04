@@ -2,9 +2,10 @@
 
 Форк [WinDirStat](https://github.com/windirstat/windirstat) с неоновой темой «Киберпанк».
 
-- Включение: **Настройки → Общие → Тёмный режим → Киберпанк (неон)**, затем перезапуск.
+- Скачать: страница [Releases](https://github.com/SevereClaw/CyberDirStart/releases/latest) → `CyberDirStat-x64.exe` (для 32-битной Windows — `CyberDirStat-x86.exe`). Установка не нужна.
+- Включение темы: **Настройки → Общие → Тёмный режим → Киберпанк (неон)**, затем перезапуск.
 - Сборка: GitHub Actions (`.github/workflows/build-cyberpunk.yml`) собирает x64 и Win32 при каждом push, готовые `.exe` лежат в Artifacts запуска.
-- Релизы: Actions → **Build WinDirStat (Cyberpunk)** → **Run workflow**, в поле версии ввести, например, `v1.0` (или `git tag v1.0 && git push origin v1.0`). GitHub соберёт программу и выложит страницу релиза с zip для x64 и Win32.
+- Релизы: Actions → **Build WinDirStat (Cyberpunk)** → **Run workflow**, в поле версии ввести, например, `v1.0` (или `git tag v1.0 && git push origin v1.0`). GitHub соберёт программу и выложит страницу релиза с готовыми `CyberDirStat-x64.exe` и `CyberDirStat-x86.exe`.
 - Обновления оригинала: раз в неделю workflow `sync-upstream.yml` проверяет [windirstat/windirstat](https://github.com/windirstat/windirstat) и открывает pull request со свежими изменениями (или issue, если они конфликтуют с темой). Запустить вручную: Actions → Sync with upstream WinDirStat → Run workflow.
 - Лицензия та же, что у оригинала: GPL-3.0-or-later (см. `LICENSE.md`).
 

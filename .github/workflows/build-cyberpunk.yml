@@ -54,22 +54,29 @@ jobs:
         with:
           path: dist
 
-      - name: Package zips
+      - name: Prepare exe files
         run: |
+          # Plain .exe assets: download and run, nothing to unpack.
+          # No version in the name: in portable mode the settings file is named after the exe.
           mkdir -p release
-          for platform in x64 Win32; do
-            dir="dist/WinDirStat-Cyberpunk-$platform"
-            cp LICENSE.md "$dir/"
-            (cd "$dir" && zip -9 -r "../../release/CyberDirStat-${TAG}-$platform.zip" .)
-          done
+          cp dist/WinDirStat-Cyberpunk-x64/*.exe   release/CyberDirStat-x64.exe
+          cp dist/WinDirStat-Cyberpunk-Win32/*.exe release/CyberDirStat-x86.exe
           ls -la release
 
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # Creates the tag on the built commit if it does not exist yet
-          gh release create "$TAG" release/*.zip \
-            --target "$GITHUB_SHA" \
-            --title "CyberDirStat $TAG" \
-            --generate-notes
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            # Release already exists (e.g. re-run): replace the files, drop old zip packages
+            gh release upload "$TAG" release/*.exe --clobber
+            for asset in $(gh release view "$TAG" --json assets --jq '.assets[].name' | grep '\.zip$' || true); do
+              gh release delete-asset "$TAG" "$asset" --yes
+            done
+          else
+            # Creates the tag on the built commit if it does not exist yet
+            gh release create "$TAG" release/*.exe \
+              --target "$GITHUB_SHA" \
+              --title "CyberDirStat $TAG" \
+              --generate-notes
+          fi
