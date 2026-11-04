@@ -443,12 +443,10 @@ void CSunburst::RenderLayout(CDC* pdc) const
         const auto scale = static_cast<Gdiplus::REAL>(m_dpiScale);
         const auto cx = static_cast<Gdiplus::REAL>(m_center.x), cy = static_cast<Gdiplus::REAL>(m_center.y);
         const auto r = static_cast<Gdiplus::REAL>(m_outerRadius) + 3.0f * scale;
-        Gdiplus::Pen ring(Gdiplus::Color(150, GetRValue(DarkMode::NeonCyan), GetGValue(DarkMode::NeonCyan),
-            GetBValue(DarkMode::NeonCyan)), 1.0f * scale);
+        Gdiplus::Pen ring(Gdiplus::Color(150, 0, 240, 255), 1.0f * scale);     // NeonCyan
         ring.SetDashStyle(Gdiplus::DashStyleDash);
         graphics.DrawEllipse(&ring, cx - r, cy - r, 2 * r, 2 * r);
-        Gdiplus::Pen tick(Gdiplus::Color(220, GetRValue(DarkMode::NeonMagenta), GetGValue(DarkMode::NeonMagenta),
-            GetBValue(DarkMode::NeonMagenta)), 2.0f * scale);
+        Gdiplus::Pen tick(Gdiplus::Color(220, 255, 0, 128), 2.0f * scale);     // NeonMagenta
         for (int i = 0; i < 12; ++i)
         {
             const double angle = i * std::numbers::pi_v<double> / 6.0;
