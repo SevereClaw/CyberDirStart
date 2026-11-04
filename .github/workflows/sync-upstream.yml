@@ -1,0 +1,81 @@
+name: Sync with upstream WinDirStat
+
+# Once a week (and on demand) checks windirstat/windirstat for new commits.
+# Clean merge   -> opens/updates a pull request from the "upstream-sync" branch.
+# Merge conflict -> opens an issue describing which files conflict.
+on:
+  schedule:
+    - cron: '17 3 * * 1'   # Mondays 03:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Fetch upstream
+        run: |
+          git remote add upstream https://github.com/windirstat/windirstat.git
+          git fetch --no-tags upstream master
+          git config user.name "github-actions[bot]"
+          git config user.email "41898299+github-actions[bot]@users.noreply.github.com"
+
+      - name: Merge upstream into upstream-sync
+        id: merge
+        run: |
+          if git merge-base --is-ancestor upstream/master HEAD; then
+            echo "Already up to date with upstream."
+            echo "result=uptodate" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          count=$(git rev-list --count HEAD..upstream/master)
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+          git switch -c upstream-sync
+          if git merge --no-edit upstream/master -m "Merge upstream WinDirStat ($count new commits)"; then
+            git push --force origin upstream-sync
+            echo "result=merged" >> "$GITHUB_OUTPUT"
+          else
+            git diff --name-only --diff-filter=U > conflicts.txt
+            git merge --abort
+            echo "result=conflict" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open or update pull request
+        if: steps.merge.outputs.result == 'merged'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh pr list --head upstream-sync --state open --json number --jq '.[0].number' | grep -q .; then
+            echo "Pull request already open; branch updated."
+          else
+            gh pr create --head upstream-sync --base "${{ github.event.repository.default_branch }}" \
+              --title "Обновления из оригинального WinDirStat (${{ steps.merge.outputs.count }} коммитов)" \
+              --body "Автоматическое слияние свежих изменений из [windirstat/windirstat](https://github.com/windirstat/windirstat). Конфликтов нет. После слияния этого PR в main сборка запустится автоматически."
+          fi
+
+      - name: Report conflict
+        if: steps.merge.outputs.result == 'conflict'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          title="Конфликт при обновлении из оригинального WinDirStat"
+          if gh issue list --state open --search "$title in:title" --json number --jq '.[0].number' | grep -q .; then
+            echo "Conflict issue already open."
+            exit 0
+          fi
+          {
+            echo "Новые изменения оригинала (${{ steps.merge.outputs.count }} коммитов) конфликтуют с правками темы в файлах:"
+            echo
+            sed 's/^/- `/; s/$/`/' conflicts.txt
+            echo
+            echo "Их нужно слить вручную: \`git fetch upstream && git merge upstream/master\`, затем разрешить конфликты."
+          } > body.md
+          gh issue create --title "$title" --body-file body.md

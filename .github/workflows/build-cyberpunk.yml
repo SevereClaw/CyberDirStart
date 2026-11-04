@@ -1,7 +1,11 @@
 name: Build WinDirStat (Cyberpunk)
 
+# Every push builds the exe (downloadable from the run's Artifacts).
+# Pushing a tag like v1.0 also publishes a GitHub Release with zip files.
 on:
   push:
+    branches: ['**']
+    tags: ['v*']
   workflow_dispatch:
 
 jobs:
@@ -12,7 +16,7 @@ jobs:
       matrix:
         platform: [x64, Win32]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -22,8 +26,39 @@ jobs:
         shell: cmd
         run: msbuild windirstat.sln /m /p:Configuration=Release /p:Platform=${{ matrix.platform }} /t:windirstat
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: WinDirStat-Cyberpunk-${{ matrix.platform }}
           path: build/*.exe
           if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/download-artifact@v5
+        with:
+          path: dist
+
+      - name: Package zips
+        run: |
+          mkdir -p release
+          for platform in x64 Win32; do
+            dir="dist/WinDirStat-Cyberpunk-$platform"
+            cp LICENSE.md "$dir/"
+            (cd "$dir" && zip -9 -r "../../release/CyberDirStat-${GITHUB_REF_NAME}-$platform.zip" .)
+          done
+          ls -la release
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" release/*.zip \
+            --title "CyberDirStat $GITHUB_REF_NAME" \
+            --generate-notes
