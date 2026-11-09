@@ -5,6 +5,7 @@
 // Distributed WITHOUT ANY WARRANTY; see LICENSE.md for details.
 
 #include "pch.h"
+#include "GameLabels.h"
 #include "Item.h"
 
 static constexpr wchar_t AsciiLower(const wchar_t value) noexcept
@@ -193,7 +194,14 @@ std::wstring CItem::GetText(const int subitem) const
             return GetName(true) + L" (" + Localization::Lookup(IDS_SCAN_INCOMPLETE) + L")";
         if (IsTypeOrFlag(ITF_REMOTE) && GetNameView().empty())
             return Localization::Lookup(IsTypeOrFlag(IT_FILE) ? IDS_S3_FOLDER_OBJECT : IDS_S3_EMPTY_PREFIX);
-        return IsTypeOrFlag(IT_HLINKS_FILE) ? GetLinkedItem()->GetPath() : GetName(true);
+        if (IsTypeOrFlag(IT_HLINKS_FILE)) return GetLinkedItem()->GetPath();
+        if (IsTypeOrFlag(IT_DIRECTORY))
+        {
+            // CyberDirStat: "1091500 — Cyberpunk 2077" for launcher folders
+            if (const std::wstring game = GameLabels::Lookup(this); !game.empty())
+                return GetName(true) + L" — " + game;
+        }
+        return GetName(true);
 
     case COL_OWNER:
         if (IsTypeOrFlag(IT_FILE, IT_DIRECTORY))

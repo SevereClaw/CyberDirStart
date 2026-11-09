@@ -17,6 +17,7 @@
 #include "SearchDlg.h"
 #include "QuickCleanDlg.h"
 #include "GrowthTracker.h"
+#include "GameLabels.h"
 #include "ProgressDlg.h"
 #include "Filtering.h"
 
@@ -1020,6 +1021,7 @@ void CWinDirStatModel::StartScanningEngine(std::vector<CItem*> items)
     // Stop any previous executions
     CWaitCursor wc;
     StopScanningEngine();
+    GameLabels::Clear(); // the tree is about to change
 
     // Watcher entries are detached snapshots; refresh the matching scan item or its nearest scanned ancestor.
     if (!HasRootItem()) return;
@@ -1427,6 +1429,9 @@ void CWinDirStatModel::StartScanningEngine(std::vector<CItem*> items)
 
         // CyberDirStat: compare with the previous snapshot and store a new one (complete scans only)
         if (stopReason == Default) GrowthTracker::OnScanFinished(GetRootItem());
+
+        // CyberDirStat: name Steam/Epic folders after their games
+        if (stopReason != Abort) GameLabels::Rebuild(GetRootItem());
 
         // Handle quiet save mode if path is set
         if (const auto savePath = CDirStatApp::Get()->GetSaveToPath(); !savePath.empty())
