@@ -212,7 +212,9 @@ std::wstring UpdateChecker::ExtractString(const std::string_view json, const std
 bool UpdateChecker::ParseAsset(const std::string_view json, const std::wstring_view assetName, std::wstring& url, std::wstring& sha256)
 {
     // The asset object starts with "name":"<asset>"; its digest and URL follow inside the same object
-    const std::string quoted = "\"" + std::string(assetName.begin(), assetName.end()) + "\"";
+    std::string quoted = "\"";
+    for (const wchar_t c : assetName) quoted.push_back(static_cast<char>(c & 0x7F)); // asset names are ASCII
+    quoted.push_back('"');
     const size_t at = json.find(quoted);
     if (at == std::string_view::npos) return false;
     const std::string_view asset = json.substr(at, std::min<size_t>(json.size() - at, 8192));
