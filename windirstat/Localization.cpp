@@ -112,6 +112,9 @@ bool Localization::LoadResource(const LANGID language)
     crackSection(L"en");
     m_rightToLeft = false;
 
+    // Cyberpunk Russian overrides regular Russian: anything it lacks stays Russian, not English
+    if (language == CyberpunkLanguage) crackSection(L"ru");
+
     if (GetLocaleInfo(lcid, LOCALE_SLANGUAGE, nullptr, 0) == 0) return true;
 
     // Short-circuit the language resource loading sequence at the first successful load

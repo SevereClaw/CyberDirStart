@@ -56,6 +56,11 @@ public:
     static bool LoadExternalLanguage(LCTYPE lcttype, LCID lcid);
     static bool LoadFile(const std::wstring& file);
     static bool LoadResource(LANGID language);
+
+    // CyberDirStat: Russian with cyberpunk slang ships as lang_ru-MD.txt. It borrows the
+    // ru-MD locale slot only to get its own LANGID; it is shown as "Russian (Cyberpunk)",
+    // loads regular Russian as the fallback and is never picked automatically.
+    static constexpr LANGID CyberpunkLanguage = 0x0819; // MAKELANGID(LANG_RUSSIAN, SUBLANG_RUSSIAN_MOLDAVIA)
     static std::wstring ConvertToWideString(const std::string_view& sv);
     static std::set<LANGID> GetLanguageList();
 };

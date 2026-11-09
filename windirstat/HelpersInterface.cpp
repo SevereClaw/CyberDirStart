@@ -56,6 +56,11 @@ std::wstring GetLocaleString(const LCTYPE lctype, const std::wstring& localeName
 
 std::wstring GetLocaleLanguage(const LANGID langid)
 {
+    if (langid == Localization::CyberpunkLanguage)
+    {
+        return L"Russian (Cyberpunk) - \u0440\u0443\u0441\u0441\u043a\u0438\u0439 (\u043a\u0438\u0431\u0435\u0440\u043f\u0430\u043d\u043a)";
+    }
+
     // Check if this is a neutral language (no specific region)
     if (SUBLANGID(langid) == SUBLANG_NEUTRAL)
     {

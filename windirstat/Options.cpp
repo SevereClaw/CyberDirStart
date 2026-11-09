@@ -170,7 +170,8 @@ void COptions::PostProcessPersistedSettings()
         const LANGID specified = GetUserDefaultLangID();
         const LANGID generic = MAKELANGID(PRIMARYLANGID(specified), SUBLANG_NEUTRAL);
         LanguageId =
-            languages.contains(specified) ? specified :
+            // the cyberpunk slang variant is opt-in only, even on ru-MD systems
+            languages.contains(specified) && specified != Localization::CyberpunkLanguage ? specified :
             languages.contains(generic) ? generic : MAKELANGID(LANG_ENGLISH, SUBLANG_NEUTRAL);
     }
     Localization::LoadResource(static_cast<LANGID>(LanguageId));

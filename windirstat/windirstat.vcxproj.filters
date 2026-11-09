@@ -700,6 +700,9 @@
     <Text Include="res\langs\lang_ru.txt">
       <Filter>Resource Files\Languages</Filter>
     </Text>
+    <Text Include="res\langs\lang_ru-MD.txt">
+      <Filter>Resource Files\Languages</Filter>
+    </Text>
     <Text Include="res\langs\lang_de.txt">
       <Filter>Resource Files\Languages</Filter>
     </Text>
