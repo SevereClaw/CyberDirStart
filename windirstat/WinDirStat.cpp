@@ -469,7 +469,8 @@ bool CDirStatApp::InitInstance()
         // Fall back to the main window if the temporary UAC owner could not be created.
         if (autoElevate && elevationOwner == nullptr) RunElevated(m_lpCmdLine);
 
-        // CyberDirStat: quietly look for a newer release (release builds only)
+        // CyberDirStat: finish a previous self-update, then quietly look for a newer release
+        UpdateChecker::CleanupAfterUpdate();
         if (COptions::CheckForUpdates && !UpdateChecker::CurrentVersion().empty()) UpdateChecker::Start(false);
     }
 
