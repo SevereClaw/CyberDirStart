@@ -158,7 +158,7 @@ namespace
             const LONGLONG value = delta.at(path);
             return growth ? value : -value;
         };
-        std::vector<GrowthTracker::Change> result;
+        std::vector<std::wstring> candidates;
         for (const auto& [path, change] : delta)
         {
             if (path.empty()) continue; // the root is summarized separately
@@ -174,11 +174,22 @@ namespace
                 }
             }
             if (explained) continue;
+            candidates.push_back(path);
+        }
 
-            const auto lookup = [](const SizeMap& map, const std::wstring& key) { const auto i = map.find(key); return i == map.end() ? 0ULL : i->second; };
-            std::wstring full = rootPath;
-            if (!full.ends_with(L'\\')) full += L'\\';
-            result.push_back({ .path = full + path, .before = lookup(before, path), .after = lookup(after, path) });
+        // A listed folder already covers its subfolders: don't repeat them
+        std::vector<GrowthTracker::Change> result;
+        const auto lookup = [](const SizeMap& map, const std::wstring& key) { const auto i = map.find(key); return i == map.end() ? 0ULL : i->second; };
+        std::wstring prefix = rootPath;
+        if (!prefix.ends_with(L'\\')) prefix += L'\\';
+        for (const auto& path : candidates)
+        {
+            const bool covered = std::ranges::any_of(candidates, [&path](const std::wstring& other)
+            {
+                return path.size() > other.size() && path.starts_with(other) && path[other.size()] == L'\\';
+            });
+            if (covered) continue;
+            result.push_back({ .path = prefix + path, .before = lookup(before, path), .after = lookup(after, path) });
         }
 
         std::ranges::sort(result, [growth](const auto& a, const auto& b)
