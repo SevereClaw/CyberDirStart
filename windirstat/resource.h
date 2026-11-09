@@ -429,6 +429,24 @@
 #define ID_WDS_CONTROL                  32968
 #define ID_FILE_SELECT_CLOUD            32969
 #define ID_VIEW_GRAPH_PRESET_NEON       32970
+#define IDD_QUICKCLEAN                  124
+#define IDC_QUICKCLEAN_INFO             1205
+#define IDC_QUICKCLEAN_TOTAL            1206
+#define IDC_QUICKCLEAN_ITEM0            1210
+#define IDC_QUICKCLEAN_ITEM1            1211
+#define IDC_QUICKCLEAN_ITEM2            1212
+#define IDC_QUICKCLEAN_ITEM3            1213
+#define IDC_QUICKCLEAN_ITEM4            1214
+#define IDC_QUICKCLEAN_ITEM5            1215
+#define IDC_QUICKCLEAN_ITEM6            1216
+#define IDC_QUICKCLEAN_SIZE0            1220
+#define IDC_QUICKCLEAN_SIZE1            1221
+#define IDC_QUICKCLEAN_SIZE2            1222
+#define IDC_QUICKCLEAN_SIZE3            1223
+#define IDC_QUICKCLEAN_SIZE4            1224
+#define IDC_QUICKCLEAN_SIZE5            1225
+#define IDC_QUICKCLEAN_SIZE6            1226
+#define ID_CLEANUP_QUICK_CLEAN          32971
 #define IDS_APP_TITLE                   57344
 #define IDS_AUTHOR_EMAIL                57345
 #define IDS_FILTER_EXAMPLE_DIRS         57346
@@ -443,9 +461,9 @@
 //
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
-#define _APS_NEXT_RESOURCE_VALUE        124
-#define _APS_NEXT_COMMAND_VALUE         32971
-#define _APS_NEXT_CONTROL_VALUE         1205
-#define _APS_NEXT_SYMED_VALUE           124
+#define _APS_NEXT_RESOURCE_VALUE        125
+#define _APS_NEXT_COMMAND_VALUE         32972
+#define _APS_NEXT_CONTROL_VALUE         1227
+#define _APS_NEXT_SYMED_VALUE           125
 #endif
 #endif

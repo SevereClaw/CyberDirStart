@@ -215,6 +215,9 @@
     <ClInclude Include="Dialogs\SearchDlg.h">
       <Filter>Header Files\User Interface\Dialogs</Filter>
     </ClInclude>
+    <ClInclude Include="Dialogs\QuickCleanDlg.h">
+      <Filter>Header Files\User Interface\Dialogs</Filter>
+    </ClInclude>
     <ClInclude Include="Dialogs\RecoveryDlg.h">
       <Filter>Header Files\User Interface\Dialogs</Filter>
     </ClInclude>
@@ -485,6 +488,9 @@
       <Filter>Source Files\User Interface\Controls</Filter>
     </ClCompile>
     <ClCompile Include="Dialogs\SearchDlg.cpp">
+      <Filter>Source Files\User Interface\Dialogs</Filter>
+    </ClCompile>
+    <ClCompile Include="Dialogs\QuickCleanDlg.cpp">
       <Filter>Source Files\User Interface\Dialogs</Filter>
     </ClCompile>
     <ClCompile Include="Dialogs\RecoveryDlg.cpp">

@@ -15,6 +15,7 @@
 #include "FinderRemote.h"
 #include "FinderNtfs.h"
 #include "SearchDlg.h"
+#include "QuickCleanDlg.h"
 #include "ProgressDlg.h"
 #include "Filtering.h"
 
@@ -138,6 +139,7 @@ void CWinDirStatModel::OnUpdateCentralHandler(CCmdUI* pCmdUI)
         { ID_SCAN_STOP,               { true,  true,  true,  LF_NONE,     ITF_ANY, isStoppable } },
         { ID_SCAN_SUSPEND,            { true,  true,  true,  LF_NONE,     ITF_ANY, isSuspendable } },
         { ID_SEARCH,                  { true,  true,  false, LF_NONE,     ITF_ANY } },
+        { ID_CLEANUP_QUICK_CLEAN,     { true,  true,  true,  LF_NONE,     ITF_ANY } },
         { ID_TOOLS_SET_DATES,         { true,  true,  false, LF_FILETREE, IT_DRIVE | IT_DIRECTORY, filesystemOnly } },
         { ID_TREEMAP_RESELECT_CHILD,  { true,  true,  false, LF_FILETREE, ITF_ANY, reselectAvail } },
         { ID_TREEMAP_SELECT_PARENT,   { false, false, false, LF_FILETREE, ITF_ANY, parentNotNull } },
@@ -634,6 +636,12 @@ void CWinDirStatModel::OnSearch()
 {
     SearchDlg search;
     search.ShowModal();
+}
+
+void CWinDirStatModel::OnQuickClean()
+{
+    CQuickCleanDlg dialog;
+    dialog.ShowModal();
 }
 
 void CWinDirStatModel::OnDisableHibernateFile()

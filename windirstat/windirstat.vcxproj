@@ -203,6 +203,7 @@ POWERSHELL.EXE -NoLogo -ExecutionPolicy Unrestricted -NoProfile -File "$(Project
     <ClInclude Include="Pages\PagePermissions.h" />
     <ClInclude Include="res\LangStrings.h" />
     <ClInclude Include="Dialogs\SearchDlg.h" />
+    <ClInclude Include="Dialogs\QuickCleanDlg.h" />
     <ClInclude Include="Dialogs\RecoveryDlg.h" />
     <ClInclude Include="SmartPointer.h" />
     <ClInclude Include="Tracer.h" />
@@ -330,6 +331,7 @@ POWERSHELL.EXE -NoLogo -ExecutionPolicy Unrestricted -NoProfile -File "$(Project
     </ClCompile>
     <ClCompile Include="Property.cpp" />
     <ClCompile Include="Dialogs\SearchDlg.cpp" />
+    <ClCompile Include="Dialogs\QuickCleanDlg.cpp" />
     <ClCompile Include="Dialogs\RecoveryDlg.cpp" />
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader>Create</PrecompiledHeader>
