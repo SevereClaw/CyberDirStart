@@ -324,6 +324,8 @@ public:
     inline static Setting<int> TreeMapLightSourceX{ OptionsTreeMap, L"TreeMapLightSourceX", CTreeMap::GetDefaults().GetLightSourceXPercent(), -200, 200 };
     inline static Setting<int> TreeMapLightSourceY{ OptionsTreeMap, L"TreeMapLightSourceY", CTreeMap::GetDefaults().GetLightSourceYPercent(), -200, 200 };
     inline static Setting<bool> TreeMapNeon{ OptionsTreeMap, L"TreeMapNeon", false };
+    inline static Setting<bool> CheckForUpdates{ OptionsGeneral, L"CyberCheckForUpdates", true };
+    inline static Setting<std::wstring> SkippedUpdate{ OptionsGeneral, L"CyberSkippedUpdate", L"" };
     inline static Setting<int> TreeMapSaturation{ OptionsTreeMap, L"TreeMapSaturation", CTreeMap::GetDefaults().GetSaturationPercent(), 0, 100 };
     inline static Setting<int> TreeMapScaleFactor{ OptionsTreeMap, L"TreeMapScaleFactor", CTreeMap::GetDefaults().GetScaleFactorPercent(), 0, 100 };
     inline static Setting<int> TreeMapStyle{ OptionsTreeMap, L"TreeMapStyle", static_cast<int>(CTreeMap::GetDefaults().style), static_cast<int>(TreeMapLayout::Style::Rows), static_cast<int>(TreeMapLayout::Style::Moore) };

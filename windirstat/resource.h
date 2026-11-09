@@ -447,6 +447,9 @@
 #define IDC_QUICKCLEAN_SIZE5            1225
 #define IDC_QUICKCLEAN_SIZE6            1226
 #define ID_CLEANUP_QUICK_CLEAN          32971
+#define ID_HELP_CHECK_UPDATES           32972
+#define ID_HELP_AUTO_UPDATES            32973
+#define ID_TOOLS_GROWTH                 32974
 #define IDS_APP_TITLE                   57344
 #define IDS_AUTHOR_EMAIL                57345
 #define IDS_FILTER_EXAMPLE_DIRS         57346
@@ -462,7 +465,7 @@
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NEXT_RESOURCE_VALUE        125
-#define _APS_NEXT_COMMAND_VALUE         32972
+#define _APS_NEXT_COMMAND_VALUE         32975
 #define _APS_NEXT_CONTROL_VALUE         1227
 #define _APS_NEXT_SYMED_VALUE           125
 #endif

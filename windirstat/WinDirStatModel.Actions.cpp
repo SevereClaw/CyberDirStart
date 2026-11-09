@@ -16,6 +16,7 @@
 #include "FinderNtfs.h"
 #include "SearchDlg.h"
 #include "QuickCleanDlg.h"
+#include "GrowthTracker.h"
 #include "ProgressDlg.h"
 #include "Filtering.h"
 
@@ -636,6 +637,11 @@ void CWinDirStatModel::OnSearch()
 {
     SearchDlg search;
     search.ShowModal();
+}
+
+void CWinDirStatModel::OnShowGrowth()
+{
+    GrowthTracker::ShowReport();
 }
 
 void CWinDirStatModel::OnQuickClean()
@@ -1418,6 +1424,9 @@ void CWinDirStatModel::StartScanningEngine(std::vector<CItem*> items)
         // Sorting and other finalization tasks
         CItem::ScanItemsFinalize(GetRootItem());
         Get()->RebuildExtensionData();
+
+        // CyberDirStat: compare with the previous snapshot and store a new one (complete scans only)
+        if (stopReason == Default) GrowthTracker::OnScanFinished(GetRootItem());
 
         // Handle quiet save mode if path is set
         if (const auto savePath = CDirStatApp::Get()->GetSaveToPath(); !savePath.empty())

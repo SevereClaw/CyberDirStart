@@ -264,6 +264,7 @@ protected:
     LRESULT OnEnterSizeMove(WPARAM, LPARAM) const;
     LRESULT OnExitSizeMove(WPARAM, LPARAM) const;
     LRESULT OnCallbackRequest(WPARAM, LPARAM lParam);
+    LRESULT OnUpdateCheckResult(WPARAM, LPARAM lParam);
     void OnTimer(UINT_PTR nIDEvent);
     void OnClose();
     void OnInitMenuPopup(MenuRef pPopupMenu, UINT nIndex, bool bSysMenu);
@@ -408,6 +409,7 @@ inline std::span<const RouteEntry> CMainFrame::Routes()
         Route::Window<&OnEnterSizeMove>(WM_ENTERSIZEMOVE),
         Route::Window<&OnExitSizeMove>(WM_EXITSIZEMOVE),
         Route::Window<&OnCallbackRequest>(WM_CALLBACKUI),
+        Route::Window<&OnUpdateCheckResult>(WM_APP + 0x200), // UpdateChecker::WM_UPDATECHECK
         Route::Window<&OnUahDrawMenu>(DarkMode::WM_UAHDRAWMENU),
         Route::Window<&OnUahDrawMenu>(DarkMode::WM_UAHDRAWMENUITEM),
         Route::Registered<&OnTaskButtonCreated>(s_TaskBarMessage),

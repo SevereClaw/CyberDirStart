@@ -5,6 +5,7 @@
 // Distributed WITHOUT ANY WARRANTY; see LICENSE.md for details.
 
 #include "pch.h"
+#include "UpdateChecker.h"
 #include "SelectDrivesDlg.h"
 #include "AboutDlg.h"
 #include "CsvLoader.h"
@@ -467,6 +468,9 @@ bool CDirStatApp::InitInstance()
 
         // Fall back to the main window if the temporary UAC owner could not be created.
         if (autoElevate && elevationOwner == nullptr) RunElevated(m_lpCmdLine);
+
+        // CyberDirStat: quietly look for a newer release (release builds only)
+        if (COptions::CheckForUpdates && !UpdateChecker::CurrentVersion().empty()) UpdateChecker::Start(false);
     }
 
     // Attempt to enable backup / restore privileges if running as admin
@@ -586,6 +590,21 @@ void CDirStatApp::LaunchHelp()
 void CDirStatApp::OnHelpManual()
 {
     LaunchHelp();
+}
+
+void CDirStatApp::OnCheckUpdates()
+{
+    UpdateChecker::Start(true);
+}
+
+void CDirStatApp::OnToggleAutoUpdates()
+{
+    COptions::CheckForUpdates = !COptions::CheckForUpdates;
+}
+
+void CDirStatApp::OnUpdateAutoUpdates(CCmdUI* pCmdUI)
+{
+    pCmdUI->SetCheck(COptions::CheckForUpdates);
 }
 
 void CDirStatApp::OnReportBug()

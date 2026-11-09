@@ -5,6 +5,7 @@
 // Distributed WITHOUT ANY WARRANTY; see LICENSE.md for details.
 
 #include "pch.h"
+#include "UpdateChecker.h"
 #include "VisualizationPane.h"
 #include "FileTabbedView.h"
 #include "FileTreeView.h"
@@ -815,6 +816,13 @@ void CMainFrame::OnTimer(const UINT_PTR nIDEvent)
     CWinDirStatModel::Get()->RunPendingHeapCleanup();
 
     CallDefaultHandler();
+}
+
+LRESULT CMainFrame::OnUpdateCheckResult(WPARAM, const LPARAM lParam)
+{
+    static_assert(UpdateChecker::WM_UPDATECHECK == WM_APP + 0x200);
+    UpdateChecker::OnResult(lParam);
+    return 0;
 }
 
 LRESULT CMainFrame::OnCallbackRequest(WPARAM, const LPARAM lParam)

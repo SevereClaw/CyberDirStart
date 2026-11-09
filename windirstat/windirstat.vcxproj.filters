@@ -332,6 +332,15 @@
     <ClInclude Include="HelpersTasks.h">
       <Filter>Header Files\Core\Helpers</Filter>
     </ClInclude>
+    <ClInclude Include="CyberVersion.h">
+      <Filter>Header Files\Core\Helpers</Filter>
+    </ClInclude>
+    <ClInclude Include="UpdateChecker.h">
+      <Filter>Header Files\Core\Helpers</Filter>
+    </ClInclude>
+    <ClInclude Include="GrowthTracker.h">
+      <Filter>Header Files\Core\Helpers</Filter>
+    </ClInclude>
     <ClInclude Include="Item.h">
       <Filter>Header Files\Core\Items</Filter>
     </ClInclude>
@@ -593,6 +602,12 @@
       <Filter>Source Files\Core\Helpers</Filter>
     </ClCompile>
     <ClCompile Include="HelpersTasks.cpp">
+      <Filter>Source Files\Core\Helpers</Filter>
+    </ClCompile>
+    <ClCompile Include="UpdateChecker.cpp">
+      <Filter>Source Files\Core\Helpers</Filter>
+    </ClCompile>
+    <ClCompile Include="GrowthTracker.cpp">
       <Filter>Source Files\Core\Helpers</Filter>
     </ClCompile>
     <ClCompile Include="MainFrame.cpp">

@@ -18,6 +18,8 @@ on:
 jobs:
   build:
     runs-on: windows-2025
+    env:
+      RELEASE_TAG: ${{ inputs.version || (startsWith(github.ref, 'refs/tags/v') && github.ref_name || '') }}
     strategy:
       fail-fast: false
       matrix:
@@ -28,6 +30,17 @@ jobs:
           fetch-depth: 0
 
       - uses: microsoft/setup-msbuild@v3
+
+      # Release builds know their version; it powers the title bar and the update check
+      - name: Stamp release version
+        if: env.RELEASE_TAG != ''
+        shell: pwsh
+        run: |
+          Set-Content -Path windirstat/CyberVersion.h -Encoding utf8 -Value @(
+            '#pragma once',
+            "#define CYBERDIRSTAT_VERSION L`"$env:RELEASE_TAG`""
+          )
+          Get-Content windirstat/CyberVersion.h
 
       - name: Build
         shell: cmd

@@ -5,6 +5,7 @@
 // Distributed WITHOUT ANY WARRANTY; see LICENSE.md for details.
 
 #include "pch.h"
+#include "CyberVersion.h"
 #include "HelpersInterface.h"
 #include "Item.h"
 #include "FinderMtp.h"
@@ -595,6 +596,11 @@ std::wstring GetAppTitle()
         return condition ? std::format(L" {}", text) : L"";
     };
 
+    if (const std::wstring_view cyberVersion = CYBERDIRSTAT_VERSION; !cyberVersion.empty())
+    {
+        return std::format(L"{}{} {}", wds::strCyberDirStat,
+            formatTag(CDirStatApp::InPortableMode(), Localization::Lookup(IDS_PORTABLE)), cyberVersion);
+    }
     return std::format(L"{}{}{} {}.{}.{}", wds::strCyberDirStat,
         formatTag(CDirStatApp::InPortableMode(), Localization::Lookup(IDS_PORTABLE)),
         formatTag(PRODUCTION == 0, L"Beta"), PRD_MAJVER, PRD_MINVER, PRD_PATCH);

@@ -223,6 +223,7 @@ protected:
     void OnCleanupEmptyFolder();
     void OnSearch();
     void OnQuickClean();
+    void OnShowGrowth();
     void OnUpdateUserDefinedCleanup(CCmdUI* pCmdUI);
     void OnUserDefinedCleanup(UINT id);
     void OnTreeMapSelectParent();
@@ -296,6 +297,7 @@ inline std::span<const RouteEntry> CWinDirStatModel::Routes()
         Route::Update<&OnUpdateCentralHandler>(ID_CLEANUP_REMOVE_SHADOW),
         Route::Command<&OnSearch>(ID_SEARCH),
         Route::Command<&OnQuickClean>(ID_CLEANUP_QUICK_CLEAN),
+        Route::Command<&OnShowGrowth>(ID_TOOLS_GROWTH),
         Route::Update<&OnUpdateCentralHandler>(ID_CLEANUP_QUICK_CLEAN),
         Route::Update<&OnUpdateCentralHandler>(ID_SEARCH),
         Route::Command<&OnExecuteDismAnalyze>(ID_CLEANUP_DISM_ANALYZE),

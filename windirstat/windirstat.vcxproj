@@ -183,6 +183,9 @@ POWERSHELL.EXE -NoLogo -ExecutionPolicy Unrestricted -NoProfile -File "$(Project
     <ClInclude Include="Filtering.h" />
     <ClInclude Include="HelpersInterface.h" />
     <ClInclude Include="HelpersTasks.h" />
+    <ClInclude Include="CyberVersion.h" />
+    <ClInclude Include="UpdateChecker.h" />
+    <ClInclude Include="GrowthTracker.h" />
     <ClInclude Include="..\contrib\xxhash\xxhash.h" />
     <ClInclude Include="Pages\PagePrompts.h" />
     <ClInclude Include="Views\ControlView.h" />
@@ -294,6 +297,8 @@ POWERSHELL.EXE -NoLogo -ExecutionPolicy Unrestricted -NoProfile -File "$(Project
     <ClCompile Include="RecoveryShared.cpp" />
     <ClCompile Include="HelpersTasks.cpp">
     </ClCompile>
+    <ClCompile Include="UpdateChecker.cpp" />
+    <ClCompile Include="GrowthTracker.cpp" />
     <ClCompile Include="..\contrib\xxhash\xxhash.c">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>

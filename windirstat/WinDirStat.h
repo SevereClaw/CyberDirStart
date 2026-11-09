@@ -82,6 +82,9 @@ protected:
     void OnHelpManual();
     void OnReportBug();
     void OnAppAbout();
+    void OnCheckUpdates();
+    void OnToggleAutoUpdates();
+    void OnUpdateAutoUpdates(CCmdUI* pCmdUI);
 };
 
 inline std::span<const RouteEntry> CDirStatApp::Routes()
@@ -96,6 +99,9 @@ inline std::span<const RouteEntry> CDirStatApp::Routes()
         Route::Update<&OnUpdateRunElevated>(ID_RUN_ELEVATED),
         Route::Command<&OnHelpManual>(ID_HELP_MANUAL),
         Route::Command<&OnReportBug>(ID_HELP_REPORTBUG),
+        Route::Command<&OnCheckUpdates>(ID_HELP_CHECK_UPDATES),
+        Route::Command<&OnToggleAutoUpdates>(ID_HELP_AUTO_UPDATES),
+        Route::Update<&OnUpdateAutoUpdates>(ID_HELP_AUTO_UPDATES),
     };
     return entries;
 }
