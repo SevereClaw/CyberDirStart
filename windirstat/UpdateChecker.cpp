@@ -9,6 +9,8 @@
 #include "UpdateChecker.h"
 #include "MessageBoxDlg.h"
 
+#include <winhttp.h>
+
 #pragma comment(lib, "winhttp.lib")
 
 namespace
