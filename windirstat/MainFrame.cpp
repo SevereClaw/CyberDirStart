@@ -328,7 +328,9 @@ void CMainFrame::SetProgressComplete()
 
     CFileTreeControl::Get()->SortItems();
     CFileDupeControl::Get()->SortItems();
-    CFileTopControl::Get()->SortItems();
+
+    // Workers have stopped, so refill largest files without waiting for the scan thread to exit.
+    CFileTopControl::Get()->UpdateItems();
 
     if (m_taskbarList)
     {
