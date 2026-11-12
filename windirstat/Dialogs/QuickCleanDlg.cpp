@@ -9,6 +9,7 @@
 #include "QuickCleanDlg.h"
 #include "MessageBoxDlg.h"
 #include "SteamLibrary.h"
+#include "UiSounds.h"
 
 // Safety rules for every category:
 //  - only the *contents* of the listed folders are touched, never the folders themselves;
@@ -385,6 +386,7 @@ void CQuickCleanDlg::OnClean()
         }
     }
 
+    if (result.bytes > 0 || result.files > 0) UiSounds::Play(UiSounds::Sound::Purge);
     ShowMessageBox(Handle(), Localization::Format(IDS_QUICKCLEAN_DONEss,
         FormatBytes(result.bytes), std::to_wstring(result.skipped)), title, MB_OK | MB_ICONINFORMATION);
 

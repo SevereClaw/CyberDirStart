@@ -184,6 +184,7 @@ public:
     inline static Setting<bool> ListGrid{ OptionsGeneral, L"ListGrid", false, CheckboxBind(IDC_SHOW_GRID) };
     inline static Setting<bool> ListStripes{ OptionsGeneral, L"ListStripes", false, CheckboxBind(IDC_SHOW_STRIPES) };
     inline static Setting<bool> PacmanAnimation{ OptionsGeneral, L"PacmanAnimation", true };
+    inline static Setting<bool> UiSounds{ OptionsGeneral, L"UiSounds", false, CheckboxBind(IDC_UI_SOUNDS) };
     inline static Setting<bool> ScanForDuplicates{ OptionsDupeTree, L"ScanForDuplicates", false };
     inline static Setting<bool> SearchWholePhrase{ OptionsSearch, L"SearchWholePhrase", false };
     inline static Setting<bool> SearchRegex{ OptionsSearch, L"SearchRegex", false };

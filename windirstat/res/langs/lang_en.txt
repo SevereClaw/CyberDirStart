@@ -299,6 +299,7 @@ IDS_PAGE_GENERAL_SHOW_SECONDS=Show s&econds in timestamps
 IDS_PAGE_GENERAL_SHOW_SIZES=&Show sizes in GiB/MiB/KiB/bytes format
 IDS_PAGE_GENERAL_SHOW_STRIPES=Show S&tripes
 IDS_PAGE_GENERAL_TITLE=General
+IDS_PAGE_GENERAL_UI_SOUNDS=Interface so&unds (scan finished, deletion, cleanup)
 IDS_PAGE_GRAPHS_BORDER_COLOR=Select&ion Border
 IDS_PAGE_GRAPHS_BRIGHTNESS=&Brightness
 IDS_PAGE_GRAPHS_CUSHION=C&ushion Shading

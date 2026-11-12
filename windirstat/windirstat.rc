@@ -666,7 +666,7 @@ BEGIN
     PUSHBUTTON      "IDS_PAGE_GRAPHS_BORDER_COLOR",IDC_TREEMAPHIGHLIGHTCOLOR,253,193,144,16,0,WS_EX_RIGHT
 END
 
-IDD_PAGE_GENERAL DIALOGEX 0, 0, 400, 237
+IDD_PAGE_GENERAL DIALOGEX 0, 0, 400, 250
 STYLE DS_SETFONT | WS_CHILD | WS_DISABLED | WS_CAPTION | WS_SYSMENU
 CAPTION "IDS_PAGE_GENERAL_TITLE"
 FONT 8, "MS Shell Dlg 2", 400, 0, 0x1
@@ -694,6 +694,7 @@ BEGIN
     COMBOBOX        IDC_COMBO,15,188,240,110,CBS_DROPDOWNLIST | CBS_SORT | WS_VSCROLL | WS_TABSTOP
     CONTROL         "IDS_PAGE_GENERAL_FORMATTING",IDC_USE_WINDOWS_LOCALE,
                     "Button",BS_AUTOCHECKBOX | WS_TABSTOP,15,206,374,12
+    CONTROL         "IDS_PAGE_GENERAL_UI_SOUNDS",IDC_UI_SOUNDS,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,7,229,390,12
 END
 
 IDD_PAGE_ADVANCED DIALOGEX 0, 0, 400, 221
@@ -1072,6 +1073,9 @@ END
 IDR_LICENSE             TEXT                    "res\\license.bin"
 
 IDR_LANGS               TEXT                    "res\\lang_combined.bin"
+IDR_SOUND_SCAN          WAVE                    "res\\sounds\\scan.wav"
+IDR_SOUND_DELETE        WAVE                    "res\\sounds\\delete.wav"
+IDR_SOUND_PURGE         WAVE                    "res\\sounds\\purge.wav"
 
 
 /////////////////////////////////////////////////////////////////////////////

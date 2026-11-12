@@ -5,6 +5,7 @@
 // Distributed WITHOUT ANY WARRANTY; see LICENSE.md for details.
 
 #include "pch.h"
+#include "UiSounds.h"
 #include "FileTreeView.h"
 #include "TreeMapView.h"
 #include "FileTopControl.h"
@@ -694,6 +695,7 @@ void CWinDirStatModel::DeletePhysicalItems(const std::vector<CItem*>& items, con
             itemsToRefresh.push_back(refresh);
     }
     itemsToRefresh.append_range(recyclers);
+    if (!cancelled && (!itemsToDelete.empty() || !remoteItems.empty())) UiSounds::Play(UiSounds::Sound::Delete);
     if (!itemsToRefresh.empty()) RefreshItem(itemsToRefresh);
 }
 

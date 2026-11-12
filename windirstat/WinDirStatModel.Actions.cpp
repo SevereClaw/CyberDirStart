@@ -18,6 +18,7 @@
 #include "QuickCleanDlg.h"
 #include "GrowthTracker.h"
 #include "GameLabels.h"
+#include "UiSounds.h"
 #include "ProgressDlg.h"
 #include "Filtering.h"
 
@@ -330,6 +331,7 @@ void CWinDirStatModel::OnCleanupEmptyRecycleBin() const
         SHEmptyRecycleBin(GetMainWindowHandle(), nullptr,
             SHERB_NOCONFIRMATION | SHERB_NOPROGRESSUI | SHERB_NOSOUND);
     }).ShowModal();
+    UiSounds::Play(UiSounds::Sound::Purge);
 
     // locate all drive items in order to refresh recyclers
     std::vector<CItem*> toRefresh;
@@ -1429,6 +1431,7 @@ void CWinDirStatModel::StartScanningEngine(std::vector<CItem*> items)
 
         // CyberDirStat: compare with the previous snapshot and store a new one (complete scans only)
         if (stopReason == Default) GrowthTracker::OnScanFinished(GetRootItem());
+        if (stopReason == Default) UiSounds::Play(UiSounds::Sound::ScanDone);
 
         // CyberDirStat: name Steam/Epic folders after their games
         if (stopReason != Abort) GameLabels::Rebuild(GetRootItem());

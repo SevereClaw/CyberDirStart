@@ -34,6 +34,7 @@ protected:
         &COptions::UseSizeSuffixes,
         &COptions::UseWindowsLocaleSetting,
         &COptions::ShowTimeSeconds,
+        &COptions::UiSounds,
     };
 
     CComboBox m_combo;

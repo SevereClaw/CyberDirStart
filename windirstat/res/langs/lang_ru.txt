@@ -299,6 +299,7 @@ IDS_PAGE_GENERAL_SHOW_SECONDS=Показывать &секунды в метка
 IDS_PAGE_GENERAL_SHOW_SIZES=Показывать размеры в формате ГБ/МБ/кБ/байт
 IDS_PAGE_GENERAL_SHOW_STRIPES=Показывать полосы
 IDS_PAGE_GENERAL_TITLE=Общие
+IDS_PAGE_GENERAL_UI_SOUNDS=&Звуки интерфейса (конец сканирования, удаление, очистка)
 IDS_PAGE_GRAPHS_BORDER_COLOR=Грани&ца выделения
 IDS_PAGE_GRAPHS_BRIGHTNESS=Яркость
 IDS_PAGE_GRAPHS_CUSHION=По&душечность

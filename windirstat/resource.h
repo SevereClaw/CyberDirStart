@@ -471,6 +471,10 @@
 #define IDC_ABANDONED_LIST              1233
 #define IDC_ABANDONED_TOTAL             1234
 #define IDC_ABANDONED_UNINSTALL         1235
+#define IDR_SOUND_SCAN                  127
+#define IDR_SOUND_DELETE                128
+#define IDR_SOUND_PURGE                 129
+#define IDC_UI_SOUNDS                   1236
 #define IDS_APP_TITLE                   57344
 #define IDS_AUTHOR_EMAIL                57345
 #define IDS_FILTER_EXAMPLE_DIRS         57346
@@ -485,9 +489,9 @@
 //
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
-#define _APS_NEXT_RESOURCE_VALUE        127
+#define _APS_NEXT_RESOURCE_VALUE        130
 #define _APS_NEXT_COMMAND_VALUE         32984
-#define _APS_NEXT_CONTROL_VALUE         1236
-#define _APS_NEXT_SYMED_VALUE           127
+#define _APS_NEXT_CONTROL_VALUE         1237
+#define _APS_NEXT_SYMED_VALUE           130
 #endif
 #endif
