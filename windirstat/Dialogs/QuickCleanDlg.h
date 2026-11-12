@@ -31,6 +31,8 @@ public:
         bool needsAdmin = false;               // usually only writable when elevated
         bool olderThanDay = false;             // keep files modified during the last 24 hours
         bool checkedByDefault = true;
+        std::vector<std::wstring> (*dynamicRoots)() = nullptr; // computed folder list instead of roots
+        bool removeRootFolders = false;        // also delete the emptied root folders themselves
     };
 
     // Totals for one category.
@@ -65,7 +67,7 @@ inline std::span<const RouteEntry> CQuickCleanDlg::Routes()
     static constexpr std::array entries
     {
         Route::Control<&OnClean>(BN_CLICKED, IDOK),
-        Route::Control<&OnItemToggled>(BN_CLICKED, IDC_QUICKCLEAN_ITEM0, IDC_QUICKCLEAN_ITEM6),
+        Route::Control<&OnItemToggled>(BN_CLICKED, IDC_QUICKCLEAN_ITEM0, IDC_QUICKCLEAN_ITEM7),
     };
     return entries;
 }

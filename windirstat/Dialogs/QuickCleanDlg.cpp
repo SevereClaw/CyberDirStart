@@ -8,6 +8,7 @@
 #include "pch.h"
 #include "QuickCleanDlg.h"
 #include "MessageBoxDlg.h"
+#include "SteamLibrary.h"
 
 // Safety rules for every category:
 //  - only the *contents* of the listed folders are touched, never the folders themselves;
@@ -17,7 +18,15 @@
 
 namespace
 {
-    constexpr int categoryCount = IDC_QUICKCLEAN_ITEM6 - IDC_QUICKCLEAN_ITEM0 + 1;
+    constexpr int categoryCount = IDC_QUICKCLEAN_ITEM7 - IDC_QUICKCLEAN_ITEM0 + 1;
+
+    // Size labels: SIZE0..SIZE6 are consecutive, SIZE7 was added later with its own id
+    constexpr int SizeId(const int i) { return i < 7 ? IDC_QUICKCLEAN_SIZE0 + i : IDC_QUICKCLEAN_SIZE7; }
+
+    std::vector<std::wstring> SteamLeftoverRoots()
+    {
+        return SteamLibrary::FindLeftovers(SteamLibrary::Load());
+    }
 
     std::wstring LongPath(const std::wstring& path)
     {
@@ -187,6 +196,13 @@ const std::vector<CQuickCleanDlg::Category>& CQuickCleanDlg::GetCategories()
             .needsAdmin = true,
             .checkedByDefault = false,
         },
+        {
+            // Mods, shader caches and unfinished downloads of games no longer installed in any library
+            .nameId = IDS_QUICKCLEAN_STEAM_LEFTOVERS,
+            .checkedByDefault = false,
+            .dynamicRoots = SteamLeftoverRoots,
+            .removeRootFolders = true,
+        },
     };
     assert(categories.size() == static_cast<size_t>(categoryCount));
     return categories;
@@ -195,6 +211,16 @@ const std::vector<CQuickCleanDlg::Category>& CQuickCleanDlg::GetCategories()
 std::vector<std::wstring> CQuickCleanDlg::ResolveRoots(const Category& category)
 {
     std::vector<std::wstring> result;
+    if (category.dynamicRoots != nullptr)
+    {
+        for (auto& path : category.dynamicRoots())
+        {
+            if (path.size() > 3 && IsPlainDirectory(path) && std::ranges::find(result, path) == result.end())
+                result.push_back(std::move(path));
+        }
+        return result;
+    }
+
     for (const auto& pattern : category.roots)
     {
         std::wstring expanded(MAX_PATH * 2, L'\0');
@@ -253,6 +279,7 @@ CQuickCleanDlg::Stats CQuickCleanDlg::Process(const Category& category, const bo
     for (const auto& root : ResolveRoots(category))
     {
         Walk(root, remove, category.olderThanDay ? &cutoff : nullptr, stats);
+        if (remove && category.removeRootFolders) RemoveDirectoryW(LongPath(root).c_str()); // only succeeds when emptied
     }
     return stats;
 }
@@ -280,7 +307,7 @@ bool CQuickCleanDlg::OnInitDialog()
         SetChecked(IDC_QUICKCLEAN_ITEM0 + i, category.checkedByDefault && (elevated || !category.needsAdmin));
 
         m_layout.AddControl(IDC_QUICKCLEAN_ITEM0 + i, 0, 0, 1, 0);
-        m_layout.AddControl(IDC_QUICKCLEAN_SIZE0 + i, 1, 0, 0, 0);
+        m_layout.AddControl(SizeId(i), 1, 0, 0, 0);
     }
     m_layout.AddControl(IDC_QUICKCLEAN_INFO, 0, 0, 1, 0);
     m_layout.AddControl(IDC_QUICKCLEAN_TOTAL, 0, 1, 1, 0);
@@ -304,7 +331,7 @@ void CQuickCleanDlg::Measure()
         const size_t index = static_cast<size_t>(i);
         m_stats[index] = Process(categories[index], false);
         const bool hasData = m_stats[index].bytes > 0;
-        SetText(IDC_QUICKCLEAN_SIZE0 + i, hasData ? FormatBytes(m_stats[index].bytes) : std::wstring(L"\u2014"));
+        SetText(SizeId(i), hasData ? FormatBytes(m_stats[index].bytes) : std::wstring(L"\u2014"));
         GetDlgItem(IDC_QUICKCLEAN_ITEM0 + i).EnableWindow(hasData);
     }
     UpdateTotal();

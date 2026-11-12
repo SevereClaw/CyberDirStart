@@ -6,6 +6,7 @@
 
 #include "pch.h"
 #include "HistoryDlg.h"
+#include "AbandonedGamesDlg.h"
 #include "TrayMonitor.h"
 #include "UpdateChecker.h"
 #include "SelectDrivesDlg.h"
@@ -620,6 +621,12 @@ void CDirStatApp::OnCheckUpdates()
 void CDirStatApp::OnShowHistory()
 {
     CHistoryDlg dialog;
+    dialog.ShowModal();
+}
+
+void CDirStatApp::OnShowAbandonedGames()
+{
+    CAbandonedGamesDlg dialog;
     dialog.ShowModal();
 }
 

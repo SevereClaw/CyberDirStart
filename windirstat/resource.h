@@ -439,6 +439,7 @@
 #define IDC_QUICKCLEAN_ITEM4            1214
 #define IDC_QUICKCLEAN_ITEM5            1215
 #define IDC_QUICKCLEAN_ITEM6            1216
+#define IDC_QUICKCLEAN_ITEM7            1217
 #define IDC_QUICKCLEAN_SIZE0            1220
 #define IDC_QUICKCLEAN_SIZE1            1221
 #define IDC_QUICKCLEAN_SIZE2            1222
@@ -463,6 +464,13 @@
 #define IDC_HISTORY_CHART               1228
 #define IDC_HISTORY_SUMMARY             1229
 #define IDC_HISTORY_FOLDERS             1230
+#define IDC_QUICKCLEAN_SIZE7            1231
+#define ID_TOOLS_ABANDONED              32983
+#define IDD_ABANDONED                   126
+#define IDC_ABANDONED_PERIOD            1232
+#define IDC_ABANDONED_LIST              1233
+#define IDC_ABANDONED_TOTAL             1234
+#define IDC_ABANDONED_UNINSTALL         1235
 #define IDS_APP_TITLE                   57344
 #define IDS_AUTHOR_EMAIL                57345
 #define IDS_FILTER_EXAMPLE_DIRS         57346
@@ -477,9 +485,9 @@
 //
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
-#define _APS_NEXT_RESOURCE_VALUE        126
-#define _APS_NEXT_COMMAND_VALUE         32983
-#define _APS_NEXT_CONTROL_VALUE         1231
-#define _APS_NEXT_SYMED_VALUE           126
+#define _APS_NEXT_RESOURCE_VALUE        127
+#define _APS_NEXT_COMMAND_VALUE         32984
+#define _APS_NEXT_CONTROL_VALUE         1236
+#define _APS_NEXT_SYMED_VALUE           127
 #endif
 #endif

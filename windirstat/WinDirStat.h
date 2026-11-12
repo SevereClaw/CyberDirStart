@@ -85,6 +85,7 @@ protected:
     void OnAppAbout();
     void OnCheckUpdates();
     void OnShowHistory();
+    void OnShowAbandonedGames();
     void OnMonitorEnable();
     void OnUpdateMonitorEnable(CCmdUI* pCmdUI);
     void OnMonitorAutostart();
@@ -111,6 +112,7 @@ inline std::span<const RouteEntry> CDirStatApp::Routes()
         Route::Command<&OnReportBug>(ID_HELP_REPORTBUG),
         Route::Command<&OnCheckUpdates>(ID_HELP_CHECK_UPDATES),
         Route::Command<&OnShowHistory>(ID_TOOLS_HISTORY),
+        Route::Command<&OnShowAbandonedGames>(ID_TOOLS_ABANDONED),
         Route::Command<&OnMonitorEnable>(ID_MONITOR_ENABLE),
         Route::Update<&OnUpdateMonitorEnable>(ID_MONITOR_ENABLE),
         Route::Command<&OnMonitorAutostart>(ID_MONITOR_AUTOSTART),

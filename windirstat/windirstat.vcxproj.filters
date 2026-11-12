@@ -353,6 +353,12 @@
     <ClInclude Include="Dialogs\HistoryDlg.h">
       <Filter>Header Files\User Interface\Dialogs</Filter>
     </ClInclude>
+    <ClInclude Include="Dialogs\AbandonedGamesDlg.h">
+      <Filter>Header Files\User Interface\Dialogs</Filter>
+    </ClInclude>
+    <ClInclude Include="SteamLibrary.h">
+      <Filter>Header Files\Core\Helpers</Filter>
+    </ClInclude>
     <ClInclude Include="Item.h">
       <Filter>Header Files\Core\Items</Filter>
     </ClInclude>
@@ -633,6 +639,12 @@
     </ClCompile>
     <ClCompile Include="Dialogs\HistoryDlg.cpp">
       <Filter>Source Files\User Interface\Dialogs</Filter>
+    </ClCompile>
+    <ClCompile Include="Dialogs\AbandonedGamesDlg.cpp">
+      <Filter>Source Files\User Interface\Dialogs</Filter>
+    </ClCompile>
+    <ClCompile Include="SteamLibrary.cpp">
+      <Filter>Source Files\Core\Helpers</Filter>
     </ClCompile>
     <ClCompile Include="MainFrame.cpp">
       <Filter>Source Files\User Interface</Filter>

@@ -190,6 +190,8 @@ POWERSHELL.EXE -NoLogo -ExecutionPolicy Unrestricted -NoProfile -File "$(Project
     <ClInclude Include="DiskHistory.h" />
     <ClInclude Include="TrayMonitor.h" />
     <ClInclude Include="Dialogs\HistoryDlg.h" />
+    <ClInclude Include="Dialogs\AbandonedGamesDlg.h" />
+    <ClInclude Include="SteamLibrary.h" />
     <ClInclude Include="..\contrib\xxhash\xxhash.h" />
     <ClInclude Include="Pages\PagePrompts.h" />
     <ClInclude Include="Views\ControlView.h" />
@@ -307,6 +309,8 @@ POWERSHELL.EXE -NoLogo -ExecutionPolicy Unrestricted -NoProfile -File "$(Project
     <ClCompile Include="DiskHistory.cpp" />
     <ClCompile Include="TrayMonitor.cpp" />
     <ClCompile Include="Dialogs\HistoryDlg.cpp" />
+    <ClCompile Include="Dialogs\AbandonedGamesDlg.cpp" />
+    <ClCompile Include="SteamLibrary.cpp" />
     <ClCompile Include="..\contrib\xxhash\xxhash.c">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
