@@ -187,6 +187,9 @@ POWERSHELL.EXE -NoLogo -ExecutionPolicy Unrestricted -NoProfile -File "$(Project
     <ClInclude Include="UpdateChecker.h" />
     <ClInclude Include="GrowthTracker.h" />
     <ClInclude Include="GameLabels.h" />
+    <ClInclude Include="DiskHistory.h" />
+    <ClInclude Include="TrayMonitor.h" />
+    <ClInclude Include="Dialogs\HistoryDlg.h" />
     <ClInclude Include="..\contrib\xxhash\xxhash.h" />
     <ClInclude Include="Pages\PagePrompts.h" />
     <ClInclude Include="Views\ControlView.h" />
@@ -301,6 +304,9 @@ POWERSHELL.EXE -NoLogo -ExecutionPolicy Unrestricted -NoProfile -File "$(Project
     <ClCompile Include="UpdateChecker.cpp" />
     <ClCompile Include="GrowthTracker.cpp" />
     <ClCompile Include="GameLabels.cpp" />
+    <ClCompile Include="DiskHistory.cpp" />
+    <ClCompile Include="TrayMonitor.cpp" />
+    <ClCompile Include="Dialogs\HistoryDlg.cpp" />
     <ClCompile Include="..\contrib\xxhash\xxhash.c">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>

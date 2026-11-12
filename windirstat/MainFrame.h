@@ -160,7 +160,7 @@ public:
     CMainFrame();
     ~CMainFrame() override;
 
-    void InitialShowWindow();
+    void InitialShowWindow(bool startHidden = false);
     void InvokeInMessageThread(std::function<void()> callback) const;
 
     void RestoreVisualizationPane(bool force = false);
@@ -265,6 +265,8 @@ protected:
     LRESULT OnExitSizeMove(WPARAM, LPARAM) const;
     LRESULT OnCallbackRequest(WPARAM, LPARAM lParam);
     LRESULT OnUpdateCheckResult(WPARAM, LPARAM lParam);
+    LRESULT OnTrayIcon(WPARAM, LPARAM lParam);
+    LRESULT OnSysCommand(WPARAM wParam, LPARAM lParam);
     void OnTimer(UINT_PTR nIDEvent);
     void OnClose();
     void OnInitMenuPopup(MenuRef pPopupMenu, UINT nIndex, bool bSysMenu);
@@ -410,6 +412,8 @@ inline std::span<const RouteEntry> CMainFrame::Routes()
         Route::Window<&OnExitSizeMove>(WM_EXITSIZEMOVE),
         Route::Window<&OnCallbackRequest>(WM_CALLBACKUI),
         Route::Window<&OnUpdateCheckResult>(WM_APP + 0x200), // UpdateChecker::WM_UPDATECHECK
+        Route::Window<&OnTrayIcon>(WM_APP + 0x201),          // TrayMonitor::WM_TRAYICON
+        Route::Window<&OnSysCommand>(WM_SYSCOMMAND),
         Route::Window<&OnUahDrawMenu>(DarkMode::WM_UAHDRAWMENU),
         Route::Window<&OnUahDrawMenu>(DarkMode::WM_UAHDRAWMENUITEM),
         Route::Registered<&OnTaskButtonCreated>(s_TaskBarMessage),

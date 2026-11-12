@@ -5,6 +5,7 @@
 // Distributed WITHOUT ANY WARRANTY; see LICENSE.md for details.
 
 #include "pch.h"
+#include "TrayMonitor.h"
 #include "UpdateChecker.h"
 #include "VisualizationPane.h"
 #include "FileTabbedView.h"
@@ -513,11 +514,13 @@ int CMainFrame::OnCreate(const LPCREATESTRUCT lpCreateStruct)
     return 0;
 }
 
-void CMainFrame::InitialShowWindow()
+void CMainFrame::InitialShowWindow(const bool startHidden)
 {
-    const WINDOWPLACEMENT wpsetting = COptions::MainWindowPlacement;
+    WINDOWPLACEMENT wpsetting = COptions::MainWindowPlacement;
     if (wpsetting.length != 0)
     {
+        // Autostart in the tray: restore the position without showing the window
+        if (startHidden) wpsetting.showCmd = SW_HIDE;
         SetWindowPlacement(&wpsetting);
     }
 
@@ -560,6 +563,7 @@ void CMainFrame::OnDestroy()
 {
     // Mark process as shutting down
     m_shuttingDown = true;
+    TrayMonitor::Shutdown();
 
     // Force early cleanup of taskbar resources
     m_taskbarList.Release();
@@ -577,6 +581,7 @@ void CMainFrame::SavePersistentAttributes() const
     // Save our window position
     WINDOWPLACEMENT wp = { .length = sizeof(wp) };
     GetWindowPlacement(&wp);
+    if (wp.showCmd == SW_HIDE) wp.showCmd = SW_SHOWNORMAL; // exiting from the tray
     COptions::MainWindowPlacement = wp;
 
     COptions::ShowToolBar = (m_wndToolBar.GetStyle() & WS_VISIBLE) != 0;
@@ -761,6 +766,12 @@ LRESULT CMainFrame::OnExitSizeMove(WPARAM, LPARAM) const
 
 void CMainFrame::OnTimer(const UINT_PTR nIDEvent)
 {
+    if (nIDEvent == TrayMonitor::TimerId)
+    {
+        if (!m_shuttingDown) TrayMonitor::OnTimer(m_hWnd);
+        return;
+    }
+
     // Exit early if shutting down
     if (nIDEvent != ID_WDS_CONTROL || m_shuttingDown) return;
     if (m_fontChangePending && ::IsWindowEnabled(m_hWnd)) OnFontSizeChanged(0, 0);
@@ -816,6 +827,21 @@ void CMainFrame::OnTimer(const UINT_PTR nIDEvent)
     CWinDirStatModel::Get()->RunPendingHeapCleanup();
 
     CallDefaultHandler();
+}
+
+LRESULT CMainFrame::OnTrayIcon(WPARAM, const LPARAM lParam)
+{
+    static_assert(TrayMonitor::WM_TRAYICON == WM_APP + 0x201);
+    TrayMonitor::OnTrayMessage(m_hWnd, lParam);
+    return 0;
+}
+
+LRESULT CMainFrame::OnSysCommand(const WPARAM wParam, LPARAM)
+{
+    // Title-bar close / Alt+F4 hide to the tray while the free space monitor runs;
+    // File -> Exit and restarts send WM_CLOSE directly and still quit.
+    if ((wParam & 0xFFF0) == SC_CLOSE && TrayMonitor::HideToTray(m_hWnd)) return 0;
+    return CallDefaultHandler();
 }
 
 LRESULT CMainFrame::OnUpdateCheckResult(WPARAM, const LPARAM lParam)

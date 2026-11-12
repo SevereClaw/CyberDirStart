@@ -7,6 +7,7 @@
 
 #include "pch.h"
 #include "GrowthTracker.h"
+#include "DiskHistory.h"
 #include "Item.h"
 #include "MessageBoxDlg.h"
 
@@ -49,20 +50,10 @@ namespace
         return { .dwLowDateTime = static_cast<DWORD>(v & 0xFFFFFFFFULL), .dwHighDateTime = static_cast<DWORD>(v >> 32) };
     }
 
-    std::filesystem::path SnapshotFolder()
-    {
-        std::array<wchar_t, MAX_PATH> buffer{};
-        const DWORD length = GetEnvironmentVariableW(L"LOCALAPPDATA", buffer.data(), static_cast<DWORD>(buffer.size()));
-        if (length == 0 || length >= buffer.size()) return {};
-        return std::filesystem::path(buffer.data()) / L"CyberDirStat" / L"Snapshots";
-    }
+    std::filesystem::path SnapshotFolder() { return DiskHistory::StorageFolder(); }
+    std::wstring RootKey(const std::wstring& root) { return DiskHistory::RootKey(root); }
 
-    std::wstring RootKey(const std::wstring& root)
-    {
-        std::wstring lower = root;
-        std::ranges::transform(lower, lower.begin(), [](const wchar_t c) { return static_cast<wchar_t>(std::towlower(c)); });
-        return std::format(L"{:016x}", std::hash<std::wstring>{}(lower));
-    }
+    std::vector<Snapshot> LoadAllSnapshots(const std::filesystem::path& folder, const std::wstring& root);
 
     void Collect(const CItem* item, const std::wstring& relative, const int depth, SizeMap& sizes)
     {
@@ -136,6 +127,17 @@ namespace
             if (name.starts_with(key + L"_") && name.ends_with(L".snap")) files.push_back(entry.path());
         }
         return files;
+    }
+
+    std::vector<Snapshot> LoadAllSnapshots(const std::filesystem::path& folder, const std::wstring& root)
+    {
+        std::vector<Snapshot> snapshots;
+        for (const auto& file : ListSnapshots(folder, RootKey(root)))
+        {
+            if (auto snapshot = Load(file, root)) snapshots.push_back(std::move(*snapshot));
+        }
+        std::ranges::sort(snapshots, {}, &Snapshot::time);
+        return snapshots;
     }
 
     // Folders whose change is at least the threshold and is not mostly explained by one child.
@@ -212,13 +214,15 @@ namespace
         Collect(item, {}, 0, current);
         report.after = item->GetSizePhysical();
 
+        // Fill-up chart: a drive records real volume usage, a folder its scanned size
+        ULONGLONG volumeUsed = 0, volumeTotal = 0;
+        if (item->IsTypeOrFlag(IT_DRIVE) && DiskHistory::QueryVolume(report.root, volumeUsed, volumeTotal))
+            DiskHistory::Append(report.root, volumeUsed, volumeTotal);
+        else
+            DiskHistory::Append(report.root, report.after, 0);
+
         const std::wstring key = RootKey(report.root);
-        std::vector<Snapshot> snapshots;
-        for (const auto& file : ListSnapshots(folder, key))
-        {
-            if (auto snapshot = Load(file, report.root)) snapshots.push_back(std::move(*snapshot));
-        }
-        std::ranges::sort(snapshots, {}, &Snapshot::time);
+        std::vector<Snapshot> snapshots = LoadAllSnapshots(folder, report.root);
 
         // Baseline: the newest snapshot at least an hour old, so an immediate rescan still compares
         // with the previous session; otherwise the oldest one available.
@@ -252,16 +256,17 @@ namespace
         return report;
     }
 
-    std::wstring FormatChange(const GrowthTracker::Change& change)
-    {
-        const bool grew = change.after >= change.before;
-        const std::wstring amount = (grew ? L"+" : L"−") + FormatBytes(grew ? change.after - change.before : change.before - change.after);
-        std::wstring detail;
-        if (change.before == 0) detail = Localization::Lookup(IDS_GROWTH_NEW);
-        else if (change.after == 0) detail = Localization::Lookup(IDS_GROWTH_REMOVED);
-        else detail = FormatBytes(change.before) + L" → " + FormatBytes(change.after);
-        return std::format(L"{}    {}    ({})", amount, change.path, detail);
-    }
+}
+
+std::wstring GrowthTracker::FormatChange(const Change& change)
+{
+    const bool grew = change.after >= change.before;
+    const std::wstring amount = (grew ? L"+" : L"−") + FormatBytes(grew ? change.after - change.before : change.before - change.after);
+    std::wstring detail;
+    if (change.before == 0) detail = Localization::Lookup(IDS_GROWTH_NEW);
+    else if (change.after == 0) detail = Localization::Lookup(IDS_GROWTH_REMOVED);
+    else detail = FormatBytes(change.before) + L" → " + FormatBytes(change.after);
+    return std::format(L"{}    {}    ({})", amount, change.path, detail);
 }
 
 void GrowthTracker::OnScanFinished(const CItem* root)
@@ -297,6 +302,27 @@ void GrowthTracker::OnScanFinished(const CItem* root)
 
     std::lock_guard guard(s_mutex);
     s_reports = std::move(reports);
+}
+
+GrowthTracker::Report GrowthTracker::LongTermGrowth(const std::wstring& root)
+{
+    Report report{ .root = root };
+    const auto folder = SnapshotFolder();
+    if (folder.empty()) return report;
+
+    const auto snapshots = LoadAllSnapshots(folder, root);
+    if (snapshots.size() < 2) return report;
+
+    const Snapshot& oldest = snapshots.front();
+    const Snapshot& newest = snapshots.back();
+    report.hasBaseline = true;
+    report.baselineTime = ToFileTime(oldest.time);
+    const auto size = [](const Snapshot& s) { const auto i = s.sizes.find(L""); return i == s.sizes.end() ? 0ULL : i->second; };
+    report.before = size(oldest);
+    report.after = size(newest);
+    report.grown = Explain(oldest.sizes, newest.sizes, root, true);
+    report.shrunk = Explain(oldest.sizes, newest.sizes, root, false);
+    return report;
 }
 
 std::vector<GrowthTracker::Report> GrowthTracker::GetReports()

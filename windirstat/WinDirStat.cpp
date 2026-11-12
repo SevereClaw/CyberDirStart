@@ -5,6 +5,8 @@
 // Distributed WITHOUT ANY WARRANTY; see LICENSE.md for details.
 
 #include "pch.h"
+#include "HistoryDlg.h"
+#include "TrayMonitor.h"
 #include "UpdateChecker.h"
 #include "SelectDrivesDlg.h"
 #include "AboutDlg.h"
@@ -225,6 +227,7 @@ class CWinDirStatCommandLineInfo final
     static constexpr std::wstring_view savePermsToFlag = L"savepermsto";
     static constexpr std::wstring_view loadFromFlag = L"loadfrom";
     static constexpr std::wstring_view legacyUninstallFlag = L"legacyuninstall";
+    static constexpr std::wstring_view trayFlag = L"tray"; // CyberDirStat autostart
     std::wstring m_path;
 
 public:
@@ -359,6 +362,10 @@ private:
             m_pendingFlag = param;
             if (bLast) m_malformedFlag = true;
         }
+        else if (param == trayFlag)
+        {
+            CDirStatApp::Get()->m_startInTray = true;
+        }
         else if (param == legacyUninstallFlag)
         {
             // Defer this destructive standalone action until parsing is validated.
@@ -423,6 +430,10 @@ bool CDirStatApp::InitInstance()
     if (hideApp && (cmdInfo.GetPath().empty() || cmdInfo.HasInvalidPath())) ExitProcess(1);
     if (hideApp) m_nCmdShow = SW_HIDE;
 
+    // CyberDirStat: autostart (/tray) keeps the window hidden while the free space monitor runs
+    const bool startInTray = m_startInTray && COptions::TrayMonitor && !hideApp;
+    if (startInTray) m_nCmdShow = SW_HIDE;
+
     if (!m_saveToPath.empty()) COptions::ScanForDuplicates = false;
     else if (!m_saveDupesToPath.empty()) COptions::ScanForDuplicates = true;
 
@@ -454,8 +465,9 @@ bool CDirStatApp::InitInstance()
         }
     }
 
-    CMainFrame::Get()->InitialShowWindow();
+    CMainFrame::Get()->InitialShowWindow(startInTray);
     m_pMainWnd->ShowWindow(m_nCmdShow);
+    TrayMonitor::Start(GetMainWindowHandle());
     m_pMainWnd->Invalidate();
     m_pMainWnd->UpdateWindow();
 
@@ -463,15 +475,19 @@ bool CDirStatApp::InitInstance()
     // background, so force it to the foreground
     if (!hideApp)
     {
-        m_pMainWnd->BringWindowToTop();
-        m_pMainWnd->SetForegroundWindow();
+        if (!startInTray)
+        {
+            m_pMainWnd->BringWindowToTop();
+            m_pMainWnd->SetForegroundWindow();
+        }
 
         // Fall back to the main window if the temporary UAC owner could not be created.
         if (autoElevate && elevationOwner == nullptr) RunElevated(m_lpCmdLine);
 
         // CyberDirStat: finish a previous self-update, then quietly look for a newer release
+        // (not right at sign-in from autostart: a dialog would pop up over the desktop)
         UpdateChecker::CleanupAfterUpdate();
-        if (COptions::CheckForUpdates && !UpdateChecker::CurrentVersion().empty()) UpdateChecker::Start(false);
+        if (!startInTray && COptions::CheckForUpdates && !UpdateChecker::CurrentVersion().empty()) UpdateChecker::Start(false);
     }
 
     // Attempt to enable backup / restore privileges if running as admin
@@ -491,7 +507,7 @@ bool CDirStatApp::InitInstance()
     }
 
     // Allow user to elevate if desired
-    if (IsElevationAvailable() && COptions::ShowElevationPrompt && !hideApp)
+    if (IsElevationAvailable() && COptions::ShowElevationPrompt && !hideApp && !startInTray)
     {
         const auto [nID, isChecked] = CMessageBoxDlg::Show(Localization::Lookup(IDS_ELEVATION_QUESTION),
             Localization::Lookup(IDS_DONT_SHOW_AGAIN),false, MB_YESNO | MB_ICONQUESTION, m_pMainWnd);
@@ -504,6 +520,9 @@ bool CDirStatApp::InitInstance()
             RunElevated(m_lpCmdLine);
         }
     }
+
+    // Autostart in the tray: no scan dialog, the tray icon opens the window when needed
+    if (startInTray) return true;
 
     // Load results if specified via command line
     if (!m_loadFromPath.empty())
@@ -596,6 +615,68 @@ void CDirStatApp::OnHelpManual()
 void CDirStatApp::OnCheckUpdates()
 {
     UpdateChecker::Start(true);
+}
+
+void CDirStatApp::OnShowHistory()
+{
+    CHistoryDlg dialog;
+    dialog.ShowModal();
+}
+
+void CDirStatApp::OnMonitorEnable()
+{
+    TrayMonitor::SetEnabled(GetMainWindowHandle(), !TrayMonitor::IsEnabled());
+}
+
+void CDirStatApp::OnUpdateMonitorEnable(CCmdUI* pCmdUI)
+{
+    pCmdUI->SetCheck(TrayMonitor::IsEnabled());
+}
+
+void CDirStatApp::OnMonitorAutostart()
+{
+    TrayMonitor::SetAutostart(!TrayMonitor::IsAutostartEnabled());
+}
+
+void CDirStatApp::OnUpdateMonitorAutostart(CCmdUI* pCmdUI)
+{
+    pCmdUI->Enable(TrayMonitor::IsEnabled());
+    pCmdUI->SetCheck(TrayMonitor::IsEnabled() && TrayMonitor::IsAutostartEnabled());
+}
+
+namespace
+{
+    int ThresholdForCommand(const UINT id)
+    {
+        switch (id)
+        {
+        case ID_MONITOR_THRESHOLD_5: return 5;
+        case ID_MONITOR_THRESHOLD_15: return 15;
+        case ID_MONITOR_THRESHOLD_20: return 20;
+        default: return 10;
+        }
+    }
+}
+
+void CDirStatApp::OnMonitorThreshold(const UINT id)
+{
+    COptions::LowSpacePercent = ThresholdForCommand(id);
+}
+
+void CDirStatApp::OnUpdateMonitorThreshold(CCmdUI* pCmdUI)
+{
+    pCmdUI->Enable(TrayMonitor::IsEnabled());
+    pCmdUI->SetRadio(COptions::LowSpacePercent == ThresholdForCommand(pCmdUI->m_nID));
+}
+
+void CDirStatApp::OnMonitorCheck()
+{
+    TrayMonitor::CheckNow(GetMainWindowHandle());
+}
+
+void CDirStatApp::OnUpdateMonitorCheck(CCmdUI* pCmdUI)
+{
+    pCmdUI->Enable(TrayMonitor::IsEnabled());
 }
 
 void CDirStatApp::OnToggleAutoUpdates()

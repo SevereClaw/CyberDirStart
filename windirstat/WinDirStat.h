@@ -68,6 +68,7 @@ protected:
     std::wstring m_saveToPath;      // Path to save results to
     std::wstring m_saveDupesToPath; // Path to save duplicates to
     std::wstring m_savePermsToPath; // Path to save permissions to
+    bool m_startInTray = false;     // CyberDirStat: launched with /tray (autostart)
     static CDirStatApp s_singleton; // Singleton application instance
 
 public:
@@ -83,6 +84,15 @@ protected:
     void OnReportBug();
     void OnAppAbout();
     void OnCheckUpdates();
+    void OnShowHistory();
+    void OnMonitorEnable();
+    void OnUpdateMonitorEnable(CCmdUI* pCmdUI);
+    void OnMonitorAutostart();
+    void OnUpdateMonitorAutostart(CCmdUI* pCmdUI);
+    void OnMonitorThreshold(UINT id);
+    void OnUpdateMonitorThreshold(CCmdUI* pCmdUI);
+    void OnMonitorCheck();
+    void OnUpdateMonitorCheck(CCmdUI* pCmdUI);
     void OnToggleAutoUpdates();
     void OnUpdateAutoUpdates(CCmdUI* pCmdUI);
 };
@@ -100,6 +110,15 @@ inline std::span<const RouteEntry> CDirStatApp::Routes()
         Route::Command<&OnHelpManual>(ID_HELP_MANUAL),
         Route::Command<&OnReportBug>(ID_HELP_REPORTBUG),
         Route::Command<&OnCheckUpdates>(ID_HELP_CHECK_UPDATES),
+        Route::Command<&OnShowHistory>(ID_TOOLS_HISTORY),
+        Route::Command<&OnMonitorEnable>(ID_MONITOR_ENABLE),
+        Route::Update<&OnUpdateMonitorEnable>(ID_MONITOR_ENABLE),
+        Route::Command<&OnMonitorAutostart>(ID_MONITOR_AUTOSTART),
+        Route::Update<&OnUpdateMonitorAutostart>(ID_MONITOR_AUTOSTART),
+        Route::Command<&OnMonitorThreshold>(ID_MONITOR_THRESHOLD_5, ID_MONITOR_THRESHOLD_20),
+        Route::Update<&OnUpdateMonitorThreshold>(ID_MONITOR_THRESHOLD_5, ID_MONITOR_THRESHOLD_20),
+        Route::Command<&OnMonitorCheck>(ID_MONITOR_CHECK),
+        Route::Update<&OnUpdateMonitorCheck>(ID_MONITOR_CHECK),
         Route::Command<&OnToggleAutoUpdates>(ID_HELP_AUTO_UPDATES),
         Route::Update<&OnUpdateAutoUpdates>(ID_HELP_AUTO_UPDATES),
     };

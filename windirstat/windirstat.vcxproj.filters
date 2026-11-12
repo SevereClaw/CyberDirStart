@@ -344,6 +344,15 @@
     <ClInclude Include="GameLabels.h">
       <Filter>Header Files\Core\Helpers</Filter>
     </ClInclude>
+    <ClInclude Include="DiskHistory.h">
+      <Filter>Header Files\Core\Helpers</Filter>
+    </ClInclude>
+    <ClInclude Include="TrayMonitor.h">
+      <Filter>Header Files\Core\Helpers</Filter>
+    </ClInclude>
+    <ClInclude Include="Dialogs\HistoryDlg.h">
+      <Filter>Header Files\User Interface\Dialogs</Filter>
+    </ClInclude>
     <ClInclude Include="Item.h">
       <Filter>Header Files\Core\Items</Filter>
     </ClInclude>
@@ -615,6 +624,15 @@
     </ClCompile>
     <ClCompile Include="GameLabels.cpp">
       <Filter>Source Files\Core\Helpers</Filter>
+    </ClCompile>
+    <ClCompile Include="DiskHistory.cpp">
+      <Filter>Source Files\Core\Helpers</Filter>
+    </ClCompile>
+    <ClCompile Include="TrayMonitor.cpp">
+      <Filter>Source Files\Core\Helpers</Filter>
+    </ClCompile>
+    <ClCompile Include="Dialogs\HistoryDlg.cpp">
+      <Filter>Source Files\User Interface\Dialogs</Filter>
     </ClCompile>
     <ClCompile Include="MainFrame.cpp">
       <Filter>Source Files\User Interface</Filter>

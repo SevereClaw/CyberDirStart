@@ -34,6 +34,12 @@ namespace GrowthTracker
     // drive/folder with its saved snapshot, then stores a fresh snapshot.
     void OnScanFinished(const CItem* root);
 
+    // "+12 GiB    C:\Users\me\Downloads    (3 GiB -> 15 GiB)"
+    std::wstring FormatChange(const Change& change);
+
+    // Oldest vs newest stored snapshot of a root (for the fill-up chart window).
+    Report LongTermGrowth(const std::wstring& root);
+
     // Reports from the latest finished scan (thread-safe copy).
     std::vector<Report> GetReports();
 
